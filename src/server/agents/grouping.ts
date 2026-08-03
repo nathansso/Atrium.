@@ -168,6 +168,33 @@ export const ROOM_PROFILES: RoomProfile[] = [
   },
 ];
 
+/** Curriculum runs have a run-scoped concept registry rather than Algebra's fixed barriers. */
+function profilesFor(concepts: ConceptId[]): RoomProfile[] {
+  const isSeededAlgebra = concepts.every((concept) => Object.hasOwn(conceptLabels, concept));
+  if (isSeededAlgebra) return ROOM_PROFILES;
+  const definitions: Array<Pick<RoomProfile, "room_id" | "name" | "band_center">> = [
+    { room_id: "ember", name: "Ember", band_center: 0.45 },
+    { room_id: "forge", name: "Forge", band_center: 0.55 },
+    { room_id: "harbor", name: "Harbor", band_center: 0.65 },
+    { room_id: "summit", name: "Summit", band_center: 0.9 },
+  ];
+  return definitions.map((definition, index) => {
+    const focus = concepts[index % concepts.length] ?? concepts[0]!;
+    return {
+      ...definition,
+      dominant_barrier: definition.room_id === "summit"
+        ? "Secure understanding ready for extension"
+        : `Developing understanding of ${conceptLabels[focus] ?? focus}`,
+      focus_concepts: definition.room_id === "summit" ? concepts : [focus],
+      signature_misconceptions: [],
+      gap_profile: Object.fromEntries(concepts.map((concept) => [concept, concept === focus ? 1 : 0.35])),
+      base_adaptation: definition.room_id === "summit"
+        ? "Extension: justify choices, compare examples, and apply the concept to a new context."
+        : `Make ${conceptLabels[focus] ?? focus} visible with worked examples, vocabulary support, and a short check for understanding.`,
+    };
+  });
+}
+
 /* -------------------------------------------------------------------------- */
 /* Similarity components                                                       */
 /* -------------------------------------------------------------------------- */
@@ -194,7 +221,7 @@ export function conceptGapSimilarity(
     (c) => c.gap * (weightByConcept.get(c.concept_id) ?? 0),
   );
   const roomVector = concepts.map(
-    (concept) => profile.gap_profile[concept] * (weightByConcept.get(concept) ?? 0),
+    (concept) => (profile.gap_profile[concept] ?? 0) * (weightByConcept.get(concept) ?? 0),
   );
   return round4(cosine(studentVector, roomVector));
 }
@@ -369,12 +396,13 @@ type GraphPlacement = {
 function graphPlacements(
   contexts: StudentContext[],
   sharedBarriers: SharedBarrierGroup[],
+  profiles: RoomProfile[],
 ): Map<string, GraphPlacement> {
   const knownStudents = new Set(contexts.map((context) => context.student_id));
   const candidates = sharedBarriers
     .map((group) => ({
       group,
-      profile: ROOM_PROFILES.find((profile) =>
+      profile: profiles.find((profile) =>
         profile.signature_misconceptions.includes(group.misconception_id),
       ),
     }))
@@ -414,14 +442,15 @@ export function buildGroupingPlan(
   const weightByConcept = new Map<ConceptId, number>(
     analysis.concepts.map((c) => [c.concept_id, c.weight]),
   );
-  const softCap = Math.ceil(contexts.length / ROOM_PROFILES.length);
+  const profiles = profilesFor(analysis.concepts.map((concept) => concept.concept_id));
+  const softCap = Math.ceil(contexts.length / profiles.length);
 
   const assignments = new Map<RoomId, StudentContext[]>(
-    ROOM_PROFILES.map((p) => [p.room_id, []]),
+    profiles.map((p) => [p.room_id, []]),
   );
   const fitMatrix: RoomFitBreakdown[] = [];
   const chosen = new Map<string, { room_id: RoomId; room_fit: number }>();
-  const graphByStudent = graphPlacements(contexts, sharedBarriers);
+  const graphByStudent = graphPlacements(contexts, sharedBarriers, profiles);
 
   // Students whose current work shows no barrier and whose mastery is already
   // above the extension threshold are placed first; this keeps the greedy pass
@@ -438,7 +467,7 @@ export function buildGroupingPlan(
   );
 
   const scoreAll = (context: StudentContext) =>
-    ROOM_PROFILES.map((profile) =>
+    profiles.map((profile) =>
       scoreRoom(
         context,
         profile,
@@ -513,12 +542,12 @@ export function buildGroupingPlan(
 
   // Repair pass: dissolve any room that cannot reach the minimum size and move
   // its members to their next-best room.
-  for (const profile of ROOM_PROFILES) {
+  for (const profile of profiles) {
     const members = assignments.get(profile.room_id)!;
     if (members.length === 0 || members.length >= MIN_ROOM_SIZE) continue;
 
     for (const member of [...members]) {
-      const alternatives = ROOM_PROFILES.filter(
+      const alternatives = profiles.filter(
         (p) =>
           p.room_id !== profile.room_id &&
           assignments.get(p.room_id)!.length >= MIN_ROOM_SIZE,
@@ -554,7 +583,7 @@ export function buildGroupingPlan(
     }
   }
 
-  const rooms: Room[] = ROOM_PROFILES.filter(
+  const rooms: Room[] = profiles.filter(
     (profile) => assignments.get(profile.room_id)!.length > 0,
   ).map((profile) => {
     const members = [...assignments.get(profile.room_id)!].sort((a, b) =>
@@ -589,7 +618,7 @@ export function buildGroupingPlan(
     };
   });
 
-  const profileById = new Map(ROOM_PROFILES.map((p) => [p.room_id, p]));
+  const profileById = new Map(profiles.map((p) => [p.room_id, p]));
 
   const placements = [...contexts]
     .sort((a, b) => (a.student_id < b.student_id ? -1 : 1))

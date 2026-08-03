@@ -10,17 +10,17 @@
  */
 import { z } from "zod";
 import type { AgentResult, ConceptId, LessonPlan, RoomId, RunState } from "@/contracts";
-import { conceptIds, roomIds } from "@/contracts";
+import { conceptLabel, roomIds } from "@/contracts";
 import type { EvolutionOutput } from "./classroomEvolution";
 
-const conceptLabels: Record<ConceptId, string> = {
+const conceptLabels: Record<string, string> = {
   integer_operations: "integer operations",
   distributive_property: "distribution",
   equation_sequencing: "equation sequencing",
   combining_like_terms: "combining like terms",
 };
 
-const wholeClassLessons: Record<ConceptId, string> = {
+const wholeClassLessons: Record<string, string> = {
   integer_operations:
     "Whole-class integer mini-lesson: sign-tracking on a shared number line before independent work.",
   distributive_property:
@@ -30,6 +30,10 @@ const wholeClassLessons: Record<ConceptId, string> = {
   combining_like_terms:
     "Whole-class like-terms mini-lesson: sort terms by variable part before combining.",
 };
+
+function lessonForConcept(conceptId: ConceptId): string {
+  return wholeClassLessons[conceptId] ?? `Whole-class ${conceptLabel(conceptId)} mini-lesson: model the idea with a cited example, then have students explain one responsible application in their own words.`;
+}
 
 const lessonPlanSchema = z.object({
   run_id: z.string().min(1),
@@ -70,7 +74,8 @@ export function runLessonPlanner(
 ): AgentResult<LessonPlan> {
   const gapConcept = evolution.largest_gap_concept;
   const gapAverage = evolution.class_concept_averages[gapConcept];
-  const wholeClassIntervention = wholeClassLessons[gapConcept];
+  const label = conceptLabels[gapConcept] ?? conceptLabel(gapConcept);
+  const wholeClassIntervention = lessonForConcept(gapConcept);
 
   const roomRotations: Record<RoomId, string> = {
     ember:
@@ -86,8 +91,8 @@ export function runLessonPlanner(
   const timeline: LessonPlan["timeline"] = [
     {
       step_id: "step-1",
-      title: `Whole-class ${conceptLabels[gapConcept]} mini-lesson`,
-      description: `${wholeClassIntervention} Largest remaining class gap: ${conceptLabels[gapConcept]} (class average ${gapAverage}).`,
+      title: `Whole-class ${label} mini-lesson`,
+      description: `${wholeClassIntervention} Largest remaining class gap: ${label} (class average ${gapAverage}).`,
       audience: "whole_class",
       duration_minutes: 10,
       evidence_refs: masteryEvidence(evolution, gapConcept),
@@ -140,7 +145,7 @@ export function runLessonPlanner(
 
   const evidenceRefs = [
     ...new Set([
-      ...conceptIds.map((conceptId) => `class_average:${conceptId}:${evolution.class_concept_averages[conceptId]}`),
+      ...Object.keys(evolution.class_concept_averages).map((conceptId) => `class_average:${conceptId}:${evolution.class_concept_averages[conceptId]}`),
       ...evolution.room_changes.map((change) => `assessment:${change.student_id}`),
     ]),
   ];

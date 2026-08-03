@@ -1,6 +1,6 @@
 import {
   assignmentAnalysisSchema,
-  conceptLabels,
+  conceptLabel,
   type AgentResult,
   type Assignment,
   type AssignmentAnalysis,
@@ -65,7 +65,7 @@ export function analyzeAssignment(assignment: Assignment): AssignmentAnalysis {
   const concepts: ConceptSummary[] = [...byConcept.entries()]
     .map(([conceptId, bucket]) => ({
       concept_id: conceptId,
-      label: conceptLabels[conceptId],
+      label: conceptLabel(conceptId),
       question_ids: bucket.questionIds,
       objective_ids: uniqueSorted(bucket.objectiveIds),
       weight: round4(bucket.share / totalShare),

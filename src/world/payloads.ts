@@ -106,7 +106,7 @@ export function readConceptSummaries(payload: Payload): ConceptSummary[] {
       ),
       prerequisite_of: pickArray(entry, "prerequisite_of")
         .map((ref) => inList(conceptIds, ref))
-        .filter((ref): ref is ConceptId => ref !== null),
+        .filter((ref): ref is (typeof conceptIds)[number] => ref !== null),
     } as unknown as ConceptSummary);
   }
   return out;

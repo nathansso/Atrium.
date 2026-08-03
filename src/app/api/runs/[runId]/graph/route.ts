@@ -1,4 +1,4 @@
-import { conceptIds, type ConceptId } from "@/contracts";
+import { type ConceptId } from "@/contracts";
 import type { GraphNeighborhood } from "@/server/adapters/types";
 import { materializeAssessmentMemory, readGraph, readRelatedNeighborhoods } from "@/server/platform/rocketRideDataPlane";
 import { apiError, apiOk, toApiError } from "@/server/http";
@@ -20,8 +20,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ runI
 
     const url = new URL(request.url);
     const requestedConcepts = url.searchParams.getAll("concept");
-    const concepts = (requestedConcepts.length > 0 ? requestedConcepts : [...conceptIds])
-      .filter((id): id is ConceptId => conceptIds.includes(id as ConceptId));
+    const runConcepts = run.concepts.map((concept) => concept.concept_id);
+    const concepts = (requestedConcepts.length > 0 ? requestedConcepts : runConcepts)
+      .filter((id): id is ConceptId => runConcepts.includes(id));
     if (concepts.length === 0) {
       return apiError("invalid_concept", "At least one known concept is required.", 400);
     }

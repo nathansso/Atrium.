@@ -25,6 +25,17 @@ import { clamp, round4 } from "../deterministic";
  */
 export const AGENT = "student_memory_agent" as const;
 
+/**
+ * New curriculum concepts have no historical student evidence on day one.
+ * Create a stable, explicitly low-confidence baseline so grouping uses the
+ * new assignment rather than leaking unrelated Algebra mastery into the run.
+ */
+function baselineMastery(studentId: string, conceptId: ConceptId) {
+  const fingerprint = [...`${studentId}:${conceptId}`].reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  const score = 0.42 + (fingerprint % 19) / 100;
+  return { score: round4(score), confidence: 0.35, trend: "flat" as const };
+}
+
 export function buildStudentContext(
   student: Student,
   analysis: AssignmentAnalysis,
@@ -35,7 +46,7 @@ export function buildStudentContext(
   );
 
   const conceptContext: ConceptContext[] = relevantConcepts.map((conceptId) => {
-    const mastery = student.mastery[conceptId];
+    const mastery = student.mastery[conceptId] ?? baselineMastery(student.student_id, conceptId);
     return {
       concept_id: conceptId,
       mastery,

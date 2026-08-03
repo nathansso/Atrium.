@@ -190,6 +190,23 @@ export const curriculumApprovalSchema = z.object({
 });
 export type CurriculumApproval = z.infer<typeof curriculumApprovalSchema>;
 
+/** A durable link between an approved research draft and its classroom run. */
+export const curriculumLaunchSchema = z.object({
+  draft_id: z.string().min(1),
+  assignment_id: z.string().min(1),
+  run_id: z.string().min(1),
+  launched_by: z.string().min(1),
+  launched_at: z.string().min(1),
+  teaching_intent: z.string().min(1),
+});
+export type CurriculumLaunch = z.infer<typeof curriculumLaunchSchema>;
+
+export const curriculumLaunchRequestSchema = z.object({
+  launched_by: z.string().min(1).default("educator"),
+  teaching_intent: z.string().min(1).max(500).optional(),
+});
+export type CurriculumLaunchRequest = z.infer<typeof curriculumLaunchRequestSchema>;
+
 /** Request body for approving/rejecting a draft. */
 export const curriculumApprovalRequestSchema = z.object({
   approved_by: z.string().min(1).default("educator"),

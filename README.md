@@ -106,6 +106,10 @@ Students are grouped by their current academic barrier — **never** by diagnosi
 
 The enforced target architecture is documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). RocketRide is the data plane above FalkorDB and LaserData; Guild.ai manages all eight agents and is the system of record for workflow traces.
 
+The planned handoff from source-grounded research to a live Atrium classroom
+run, including the Machine Learning smoke-test/demo, is documented in
+[docs/RESEARCH_TO_LAUNCH.md](docs/RESEARCH_TO_LAUNCH.md).
+
 ### System Overview
 
 ```mermaid
