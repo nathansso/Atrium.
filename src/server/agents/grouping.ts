@@ -18,6 +18,7 @@ import {
 } from "@/contracts";
 import { buildAgentResult, type AgentContext } from "../agentRuntime";
 import { clamp, round4 } from "../deterministic";
+import type { SharedBarrierGroup } from "../adapters";
 
 /**
  * Grouping Agent.
@@ -293,6 +294,7 @@ function scoreRoom(
 function placementRationale(
   context: StudentContext,
   profile: RoomProfile,
+  graphPath?: string,
 ): string {
   const topGap = [...context.concept_context].sort(
     (a, b) => b.gap - a.gap || (a.concept_id < b.concept_id ? -1 : 1),
@@ -313,12 +315,17 @@ function placementRationale(
           .join(" and ")}.`
       : " No signature barrier yet, so placement follows the largest concept gap.";
 
-  return `${context.display_name} has the largest unmet need in ${conceptLabels[topGap.concept_id]} (mastery ${topGap.mastery.score.toFixed(2)}).${barrierText}`;
+  const graphSentence = graphPath
+    ? ` FalkorDB confirmed the shared barrier through ${graphPath}.`
+    : "";
+
+  return `${context.display_name} has the largest unmet need in ${conceptLabels[topGap.concept_id]} (mastery ${topGap.mastery.score.toFixed(2)}).${barrierText}${graphSentence}`;
 }
 
 function roomExplanation(
   profile: RoomProfile,
   members: StudentContext[],
+  graphPaths: string[] = [],
 ): string {
   const barrierCounts = new Map<MisconceptionId, number>();
   for (const member of members) {
@@ -345,12 +352,64 @@ function roomExplanation(
           members.reduce((sum, m) => sum + m.mean_mastery, 0) / members.length
         ).toFixed(2)} with no active barrier on these concepts`;
 
-  return `${profile.name} exists because of one shared academic barrier: ${profile.dominant_barrier.toLowerCase()}. Evidence: ${evidenceSentence}. Placement used current work only; no diagnosis or accommodation label was read.`;
+  const graphSentence =
+    graphPaths.length > 0
+      ? ` FalkorDB traversal: ${graphPaths.join("; ")}.`
+      : "";
+
+  return `${profile.name} exists because of one shared academic barrier: ${profile.dominant_barrier.toLowerCase()}. Evidence: ${evidenceSentence}.${graphSentence} Placement used current work only; no diagnosis or accommodation label was read.`;
+}
+
+type GraphPlacement = {
+  profile: RoomProfile;
+  group: SharedBarrierGroup;
+  evidenceRef: string;
+};
+
+function graphPlacements(
+  contexts: StudentContext[],
+  sharedBarriers: SharedBarrierGroup[],
+): Map<string, GraphPlacement> {
+  const knownStudents = new Set(contexts.map((context) => context.student_id));
+  const candidates = sharedBarriers
+    .map((group) => ({
+      group,
+      profile: ROOM_PROFILES.find((profile) =>
+        profile.signature_misconceptions.includes(group.misconception_id),
+      ),
+    }))
+    .filter(
+      (candidate): candidate is {
+        group: SharedBarrierGroup;
+        profile: RoomProfile;
+      } =>
+        candidate.profile !== undefined &&
+        candidate.group.student_ids.filter((studentId) =>
+          knownStudents.has(studentId),
+        ).length >= MIN_ROOM_SIZE,
+    )
+    .sort(
+      (a, b) =>
+        b.group.student_ids.length - a.group.student_ids.length ||
+        a.group.misconception_id.localeCompare(b.group.misconception_id) ||
+        a.profile.room_id.localeCompare(b.profile.room_id),
+    );
+
+  const placements = new Map<string, GraphPlacement>();
+  for (const { group, profile } of candidates) {
+    const evidenceRef = `falkordb:shared-barrier:${group.misconception_id}:${group.concept_id}`;
+    for (const studentId of [...group.student_ids].sort()) {
+      if (!knownStudents.has(studentId) || placements.has(studentId)) continue;
+      placements.set(studentId, { profile, group, evidenceRef });
+    }
+  }
+  return placements;
 }
 
 export function buildGroupingPlan(
   contexts: StudentContext[],
   analysis: AssignmentAnalysis,
+  sharedBarriers: SharedBarrierGroup[] = [],
 ): GroupingPlan {
   const weightByConcept = new Map<ConceptId, number>(
     analysis.concepts.map((c) => [c.concept_id, c.weight]),
@@ -362,16 +421,21 @@ export function buildGroupingPlan(
   );
   const fitMatrix: RoomFitBreakdown[] = [];
   const chosen = new Map<string, { room_id: RoomId; room_fit: number }>();
+  const graphByStudent = graphPlacements(contexts, sharedBarriers);
 
   // Students whose current work shows no barrier and whose mastery is already
   // above the extension threshold are placed first; this keeps the greedy pass
   // from spending Summit capacity on students who still need repair.
   const extensionReady = contexts.filter(
     (c) =>
+      !graphByStudent.has(c.student_id) &&
       c.mean_mastery >= EXTENSION_MASTERY_THRESHOLD &&
       c.active_misconceptions.length === 0,
   );
-  const remaining = contexts.filter((c) => !extensionReady.includes(c));
+  const graphReady = contexts.filter((c) => graphByStudent.has(c.student_id));
+  const remaining = contexts.filter(
+    (c) => !extensionReady.includes(c) && !graphByStudent.has(c.student_id),
+  );
 
   const scoreAll = (context: StudentContext) =>
     ROOM_PROFILES.map((profile) =>
@@ -386,13 +450,19 @@ export function buildGroupingPlan(
       ),
     );
 
-  const commit = (context: StudentContext, scored: ScoredRoom[]) => {
+  const commit = (
+    context: StudentContext,
+    scored: ScoredRoom[],
+    forcedProfile?: RoomProfile,
+  ) => {
     const ranked = [...scored].sort(
       (a, b) =>
         b.breakdown.room_fit - a.breakdown.room_fit ||
         (a.profile.room_id < b.profile.room_id ? -1 : 1),
     );
-    const best = ranked[0];
+    const best = forcedProfile
+      ? ranked.find((entry) => entry.profile.room_id === forcedProfile.room_id)!
+      : ranked[0];
     assignments.get(best.profile.room_id)!.push(context);
     chosen.set(context.student_id, {
       room_id: best.profile.room_id,
@@ -400,6 +470,14 @@ export function buildGroupingPlan(
     });
     fitMatrix.push(...scored.map((s) => s.breakdown));
   };
+
+  // Graph-confirmed cohorts go first so the shared path is load-bearing in
+  // room formation, rather than being attached later as decorative metadata.
+  for (const context of [...graphReady].sort((a, b) =>
+    a.student_id < b.student_id ? -1 : 1,
+  )) {
+    commit(context, scoreAll(context), graphByStudent.get(context.student_id)!.profile);
+  }
 
   for (const context of [...extensionReady].sort((a, b) =>
     a.student_id < b.student_id ? -1 : 1,
@@ -482,19 +560,32 @@ export function buildGroupingPlan(
     const members = [...assignments.get(profile.room_id)!].sort((a, b) =>
       a.student_id < b.student_id ? -1 : 1,
     );
+    const graphEvidence = members
+      .map((member) => graphByStudent.get(member.student_id))
+      .filter(
+        (placement): placement is GraphPlacement =>
+          placement?.profile.room_id === profile.room_id,
+      );
+    const graphRefs = [...new Set(graphEvidence.map((item) => item.evidenceRef))];
+    const graphPaths = [
+      ...new Set(graphEvidence.map((item) => item.group.path_explanation)),
+    ];
     return {
       room_id: profile.room_id,
       name: roomNameById[profile.room_id],
       focus_concepts: profile.focus_concepts,
       dominant_barrier: profile.dominant_barrier,
-      evidence_refs: members.flatMap((m) =>
-        m.evidence_refs.filter(
-          (ref) => ref.includes("#pattern:") || ref.includes("#mastery:"),
+      evidence_refs: [
+        ...members.flatMap((m) =>
+          m.evidence_refs.filter(
+            (ref) => ref.includes("#pattern:") || ref.includes("#mastery:"),
+          ),
         ),
-      ),
+        ...graphRefs,
+      ],
       members: members.map((m) => m.student_id),
       base_adaptation: profile.base_adaptation,
-      explanation: roomExplanation(profile, members),
+      explanation: roomExplanation(profile, members, graphPaths),
     };
   });
 
@@ -505,12 +596,24 @@ export function buildGroupingPlan(
     .map((context) => {
       const decision = chosen.get(context.student_id)!;
       const profile = profileById.get(decision.room_id)!;
+      const graphPlacement = graphByStudent.get(context.student_id);
       return {
         student_id: context.student_id,
         room_id: decision.room_id,
         room_fit: decision.room_fit,
-        rationale: placementRationale(context, profile),
-        evidence_refs: context.evidence_refs,
+        rationale: placementRationale(
+          context,
+          profile,
+          graphPlacement?.profile.room_id === decision.room_id
+            ? graphPlacement.group.path_explanation
+            : undefined,
+        ),
+        evidence_refs: [
+          ...context.evidence_refs,
+          ...(graphPlacement?.profile.room_id === decision.room_id
+            ? [graphPlacement.evidenceRef]
+            : []),
+        ],
       };
     });
 
@@ -518,7 +621,10 @@ export function buildGroupingPlan(
     rooms,
     placements,
     fit_matrix: fitMatrix,
-    grouping_signals_used: GROUPING_SIGNALS_USED,
+    grouping_signals_used:
+      graphByStudent.size > 0
+        ? [...GROUPING_SIGNALS_USED, "falkordb_shared_barrier_path"]
+        : GROUPING_SIGNALS_USED,
     excluded_signals: EXCLUDED_SIGNALS,
   };
 }
@@ -527,8 +633,9 @@ export function runGrouping(
   ctx: AgentContext,
   contexts: StudentContext[],
   analysis: AssignmentAnalysis,
+  sharedBarriers: SharedBarrierGroup[] = [],
 ): AgentResult<GroupingPlan> {
-  const plan = buildGroupingPlan(contexts, analysis);
+  const plan = buildGroupingPlan(contexts, analysis, sharedBarriers);
 
   // Confidence is the mean decisiveness of the placements: how far the chosen
   // room scored above the average alternative for that student.

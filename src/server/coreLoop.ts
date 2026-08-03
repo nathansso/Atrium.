@@ -35,6 +35,7 @@ import {
   runAssignmentCuratorWithPipeline,
 } from "./agents/assignmentCurator";
 import { getAdapters } from "./adapters";
+import { syncClassroomGraph } from "./memory/classroomGraph";
 import {
   extractUploadedAssignment,
   type MotionProvenance,
@@ -238,7 +239,29 @@ async function beginCoreRun(input: {
   await recordAgentRun(runId, "student_memory_agent", memory);
   await drainEventsToStream(updateRun(runId, (state) => state));
 
-  const grouping = runGrouping(ctx, memory.result.contexts, architect.result);
+  const { falkordb } = getAdapters();
+  let sharedBarriers: Awaited<ReturnType<typeof syncClassroomGraph>> = [];
+  try {
+    sharedBarriers = await syncClassroomGraph({
+      falkordb,
+      runId,
+      students,
+      concepts: architect.result.concepts.map((concept) => concept.concept_id),
+      updatedAt: initialState.created_at,
+    });
+  } catch (error) {
+    console.warn(
+      "[falkordb] classroom-memory sync failed; using deterministic grouping fallback.",
+      error,
+    );
+  }
+
+  const grouping = runGrouping(
+    ctx,
+    memory.result.contexts,
+    architect.result,
+    sharedBarriers,
+  );
   updateRun(runId, (state) => ({
     ...state,
     rooms: grouping.result.rooms,
@@ -246,6 +269,14 @@ async function beginCoreRun(input: {
     status: "grouped",
   }));
   await recordAgentRun(runId, "grouping_agent", grouping);
+  try {
+    await falkordb.saveRoomFormation(runId, grouping.result.rooms);
+  } catch (error) {
+    console.warn(
+      "[falkordb] room persistence failed; continuing with in-run room state.",
+      error,
+    );
+  }
   await drainEventsToStream(updateRun(runId, (state) => state));
 
   const accessibility = runAccessibility(
