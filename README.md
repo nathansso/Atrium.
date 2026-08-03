@@ -262,6 +262,8 @@ SPONSOR_MODE=live + keys present     → live
 SPONSOR_MODE=live + keys missing     → mock + one-time warning
 ```
 
+Guild needs two keys, not one: `GUILD_API_KEY` and `GUILD_LESSON_PLANNER_API_KEY`, one per gated agent. Either missing falls back to the Guild mock like any other adapter.
+
 A missing key degrades one layer. It never takes down the run. This is a demo-day property: venue wifi failing should cost a sponsor integration, not the presentation.
 
 `GET /api/adapters/status` reports what each layer actually resolved to, so what you see on stage is what is really running.
@@ -313,9 +315,9 @@ Mastery updates use Bayesian Knowledge Tracing (`src/server/mastery/`) rather th
 | FalkorDB | `falkordb@6.7.0` | Docker, local | Memory layer |
 | LaserData | `@laserdata/laser-sdk` | laser-stack Docker or cloud | Live layer |
 | RocketRide | `rocketride@1.3.0` | Hosted API (key required) | Motion layer |
-| Guild.ai | `@guildai/agents-sdk` | Hosted (CLI auth) | Agent layer |
+| Guild.ai | Trigger REST API (Basic Auth) | Hosted, `mem-in-motion/atrium` workspace | Agent layer |
 
-> `@guildai/agents-sdk` is not on public npm. `guild auth login` configures a private registry — this is expected, not an error.
+> **Guild.ai's live adapter covers the two approval gates, not the full agent chain.** `@guildai/agents-sdk` is the sandboxed runtime Guild agent code runs *inside* — it isn't an npm client library, and agents can't be called from an external app by importing it. The only externally callable surface is Guild's [Trigger REST API](https://docs.guild.ai/platform/triggers): HTTP Basic Auth against a per-agent API-trigger credential. The eight specialist agents already exist in the workspace with matching prompts and handoffs; agent registry, handoffs, and traces have no external Guild endpoint (they're internal to how a session runs), so both mock and live keep that local. `requestApproval`/`resolveApproval` are genuinely live: they start a real session on `assessment-agent` or `lesson-planner` and forward the professor's decision back into it. All four sponsors ship a live adapter. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the control-plane/data-plane boundary rules.
 
 ---
 
@@ -425,7 +427,8 @@ ROCKETRIDE_URI=https://api.rocketride.ai
 
 # Agents — Guild.ai
 GUILD_API_KEY=
-GUILD_WORKSPACE=
+GUILD_LESSON_PLANNER_API_KEY=
+GUILD_WORKSPACE=mem-in-motion/atrium
 ```
 
 Variable names match each vendor SDK's own convention, so the SDKs can read `process.env` directly.
@@ -490,7 +493,7 @@ npm run verify:world     # renderer smoke check
 
 ## Project Status
 
-Atrium is a hackathon project under active development. The domain loop, contracts, agents, renderer, RocketRide data plane, and Guild control plane are built. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for ownership rules and the migration plan.
+Atrium is a hackathon project built for Memory Meets Motion (August 3 2026). The domain loop, contracts, the eight specialist agents, the isometric renderer, the in-world FalkorDB memory graph, the RocketRide data plane, and the Guild control plane are built and covered by the test suite. All four sponsors have a live adapter: FalkorDB, LaserData, and RocketRide are full live implementations; Guild.ai's live adapter covers the two mandatory approval gates over its Trigger REST API, with agent registry, handoffs, and traces kept local (Guild has no external endpoint for any of those). See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for ownership rules and [docs/SPRINT_PLAN.md](docs/SPRINT_PLAN.md) for original lane ownership.
 
 ---
 

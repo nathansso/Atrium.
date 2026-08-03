@@ -11,6 +11,7 @@ const ENV_KEYS = [
   "ROCKETRIDE_APIKEY",
   "ROCKETRIDE_URI",
   "GUILD_API_KEY",
+  "GUILD_LESSON_PLANNER_API_KEY",
   "GUILD_WORKSPACE",
 ];
 
@@ -80,6 +81,20 @@ describe("env config", () => {
 
     vi.stubEnv("ROCKETRIDE_APIKEY", "rr-key");
     expect(resolveAdapterMode("rocketride")).toBe("live");
+  });
+
+  it("requires both gate credentials and the workspace before guild goes live", () => {
+    vi.stubEnv("SPONSOR_MODE", "live");
+
+    vi.stubEnv("GUILD_API_KEY", "id1:secret1");
+    expect(hasRequiredKeys("guild")).toBe(false);
+
+    vi.stubEnv("GUILD_LESSON_PLANNER_API_KEY", "id2:secret2");
+    expect(hasRequiredKeys("guild")).toBe(false);
+
+    vi.stubEnv("GUILD_WORKSPACE", "mem-in-motion/atrium");
+    expect(hasRequiredKeys("guild")).toBe(true);
+    expect(resolveAdapterMode("guild")).toBe("live");
   });
 
   it("degrades one layer at a time rather than the whole run", () => {
