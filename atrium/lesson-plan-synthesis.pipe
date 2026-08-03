@@ -1,0 +1,39 @@
+{
+  "pipeline": {
+    "name": "atrium/lesson-plan-synthesis",
+    "description": "Atrium motion pipeline. Turns the updated classroom state (per-room mastery, the largest class gap, room sizes) into a next-day teaching timeline for the professor and TA. Output JSON is consumed by Atrium's Lesson Planner agent (src/server/agents/lessonPlanner.ts).",
+    "version": 1,
+    "source": "input",
+    "components": [
+      {
+        "id": "input",
+        "provider": "webhook",
+        "name": "Updated classroom state",
+        "description": "Receives JSON: { largest_gap_concept, room_sizes, class_concept_averages } via client.send().",
+        "config": { "method": "POST", "accepts": ["application/json", "text/plain"] }
+      },
+      {
+        "id": "llm",
+        "provider": "ai_chat",
+        "name": "Lesson planner",
+        "description": "Synthesises an evidence-backed next-day timeline that fits one class period.",
+        "config": {
+          "provider": "${ROCKETRIDE_LLM_PROVIDER}",
+          "model": "${ROCKETRIDE_LLM_MODEL}",
+          "temperature": 0.3,
+          "output_format": "json",
+          "system": "You are Atrium's Lesson Planner. Given per-room mastery, the largest class gap and room sizes, produce tomorrow's timeline. Return STRICT JSON ONLY matching: {\"whole_class_intervention\":string,\"timeline\":[{\"step_id\":string,\"title\":string,\"audience\":\"whole_class\"|string,\"description\":string,\"duration_minutes\":number}]}. Ground every step in the evidence provided and keep the whole plan within a single class period."
+        },
+        "input": [{ "lane": "text", "from": "input" }]
+      },
+      {
+        "id": "output",
+        "provider": "response",
+        "name": "Next-day timeline",
+        "description": "result_types.text is parsed by Atrium's live adapter.",
+        "config": { "result_types": { "text": "text" } },
+        "input": [{ "lane": "text", "from": "llm" }]
+      }
+    ]
+  }
+}

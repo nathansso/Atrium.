@@ -1,0 +1,39 @@
+{
+  "pipeline": {
+    "name": "atrium/misconception-explanation",
+    "description": "Atrium motion pipeline. Given a student's wrong answer, the correct answer and the student's misconception history, classifies the single most likely underlying misconception with evidence. Output JSON is consumed by Atrium's Assessment agent (src/server/agents/assessment.ts); the classified misconception is then written back into the FalkorDB graph.",
+    "version": 1,
+    "source": "input",
+    "components": [
+      {
+        "id": "input",
+        "provider": "webhook",
+        "name": "Wrong answer + history",
+        "description": "Receives JSON: { wrong_answer, correct_answer, concept_id, misconception_history } via client.send().",
+        "config": { "method": "POST", "accepts": ["application/json", "text/plain"] }
+      },
+      {
+        "id": "llm",
+        "provider": "ai_chat",
+        "name": "Misconception classifier",
+        "description": "Classifies the underlying misconception and cites the evidence for it.",
+        "config": {
+          "provider": "${ROCKETRIDE_LLM_PROVIDER}",
+          "model": "${ROCKETRIDE_LLM_MODEL}",
+          "temperature": 0,
+          "output_format": "json",
+          "system": "You are Atrium's Assessment agent. Given a wrong answer, the correct answer, the concept and the student's misconception history, classify the single most likely misconception. Return STRICT JSON ONLY matching: {\"misconception_id\":string,\"concept_id\":string,\"explanation\":string,\"confidence\":number,\"evidence\":[string]}. confidence is between 0 and 1. Prefer an existing misconception_id from the history when it fits the evidence rather than inventing a new one."
+        },
+        "input": [{ "lane": "text", "from": "input" }]
+      },
+      {
+        "id": "output",
+        "provider": "response",
+        "name": "Classified misconception",
+        "description": "result_types.text is parsed by Atrium's live adapter.",
+        "config": { "result_types": { "text": "text" } },
+        "input": [{ "lane": "text", "from": "llm" }]
+      }
+    ]
+  }
+}
