@@ -162,7 +162,7 @@ export interface LaserStreamAdapter {
   ): () => void;
   /** Durable replay from an offset — this is what the UI scrubber reads. */
   replay(runId: string, fromOffset?: bigint): Promise<StreamedEvent[]>;
-  /** Highest committed offset for the run topic. */
+  /** Highest durable record offset for the run topic. */
   latestOffset(runId: string): Promise<bigint>;
   /** Run topics this connection has seen. */
   listTopics(): Promise<string[]>;

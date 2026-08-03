@@ -78,6 +78,7 @@ async function topicFor(runId: string, partitions = 1) {
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
+const REPLAY_BATCH_SIZE = 500;
 
 /**
  * Decodes one Iggy message back into an AgentEvent. Parsing is strict: a
@@ -164,7 +165,7 @@ export function createLiveLaserAdapter(): LaserStreamAdapter {
     /** Durable replay from an offset — what the UI scrubber reads. */
     async replay(runId: string, fromOffset = 0n): Promise<StreamedEvent[]> {
       const topic = await topicFor(runId);
-      const cursor = (await topic.replay({ batchSize: 500 })).fromOffsets(
+      const cursor = (await topic.replay({ batchSize: REPLAY_BATCH_SIZE })).fromOffsets(
         new Map([[0, fromOffset]]),
       );
 
@@ -183,7 +184,7 @@ export function createLiveLaserAdapter(): LaserStreamAdapter {
 
     async latestOffset(runId: string): Promise<bigint> {
       const topic = await topicFor(runId);
-      const cursor = await topic.replay({ batchSize: 500 });
+      const cursor = await topic.replay({ batchSize: REPLAY_BATCH_SIZE });
       let latest = -1n;
       for (;;) {
         const batch = await cursor.poll();

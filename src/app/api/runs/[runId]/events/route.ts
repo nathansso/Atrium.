@@ -1,7 +1,8 @@
 /**
  * GET  /api/runs/:runId/events — SSE stream of agent events for a run.
- *      Replays full history, then streams live events. Send
- *      Accept: application/json (or ?format=json) for a plain history array.
+ *      Replays history, resumes after Last-Event-ID, then streams live events.
+ *      Send Accept: application/json (or ?format=json) for
+ *      `{ run_id, events }` history.
  * POST /api/runs/:runId/events — mock-mode-only event injector so the
  *      frontend can drive animations before the agent loop is merged.
  */

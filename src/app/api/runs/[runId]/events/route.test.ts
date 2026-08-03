@@ -150,6 +150,43 @@ describe("GET /api/runs/:runId/events", () => {
     expect(body.events).toHaveLength(1);
   });
 
+  it("resumes mock SSE history after Last-Event-ID", async () => {
+    emitEvent({ run_id: RUN, event_type: "assignment.uploaded", source_agent: "assignment_architect" });
+    const previous = emitEvent({
+      run_id: RUN,
+      event_type: "assignment.concepts.extracted",
+      source_agent: "assignment_architect",
+    });
+    emitEvent({ run_id: RUN, event_type: "groups.proposed", source_agent: "grouping_agent" });
+
+    const controller = new AbortController();
+    const request = new Request(`http://localhost/api/runs/${RUN}/events`, {
+      signal: controller.signal,
+      headers: { "Last-Event-ID": previous.event_id },
+    });
+    const response = await GET(request, makeContext(RUN));
+
+    expect((await readEvents(response.body!.getReader(), 1)).map((event) => event.event_type))
+      .toEqual(["groups.proposed"]);
+    controller.abort();
+  });
+
+  it("replays mock SSE history from the start for an unknown Last-Event-ID", async () => {
+    emitEvent({ run_id: RUN, event_type: "assignment.uploaded", source_agent: "assignment_architect" });
+    emitEvent({ run_id: RUN, event_type: "groups.proposed", source_agent: "grouping_agent" });
+
+    const controller = new AbortController();
+    const request = new Request(`http://localhost/api/runs/${RUN}/events`, {
+      signal: controller.signal,
+      headers: { "Last-Event-ID": "evt_missing" },
+    });
+    const response = await GET(request, makeContext(RUN));
+
+    expect((await readEvents(response.body!.getReader(), 2)).map((event) => event.event_type))
+      .toEqual(["assignment.uploaded", "groups.proposed"]);
+    controller.abort();
+  });
+
   it("reads JSON history from Laser in live mode", async () => {
     laser.mode = "live";
     const event = emitEvent({
