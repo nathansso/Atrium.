@@ -103,40 +103,30 @@ Students are grouped by their current academic barrier — **never** by diagnosi
 
 ### System Overview
 
+![Atrium architecture — LaserData to FalkorDB to RocketRide.ai, branching to Guild.ai and external tools, then the user surface](public/assets/architecture.png)
+
+The stack is a single top-to-bottom pipeline, not a parallel fan-out. Live signals land first and become durable graph memory; only then does the orchestration engine reason over that memory and decide the next action, coordinating agents and calling external tools before anything reaches the product surface.
+
+<details>
+<summary>Diagram source (Mermaid)</summary>
+
 ```mermaid
 flowchart TD
-  subgraph Client
-    UI["Isometric World<br/>custom canvas renderer"]
-    PANELS["React Panels<br/>rooms · students · graph · plan"]
-  end
+  LASER["LaserData<br/>Live signals — events, sensors, feeds"]
+  FALKOR["FalkorDB<br/>Persistent graph memory — entities, relationships, history"]
+  ROCKET["RocketRide.ai<br/>Orchestration engine — reasoning + tool calls, decides next action"]
+  GUILD["Guild.ai<br/>Multi-agent coordination"]
+  TOOLS["External Tools / APIs<br/>Integrations, actions (the motion)"]
+  UI["User / UI<br/>Dashboard, chat, app — your product surface"]
 
-  subgraph Server["Next.js App Router"]
-    API["API Routes"]
-    AGENTS["8 Specialist Agents"]
-    ADAPTERS["Adapter Seam<br/>src/server/adapters/types.ts"]
-    AUDIT["Audit Log"]
-  end
-
-  subgraph Sponsors
-    FALKOR["FalkorDB<br/>MEMORY"]
-    LASER["LaserData<br/>LIVE"]
-    ROCKET["RocketRide<br/>MOTION"]
-    GUILD["Guild.ai<br/>AGENTS"]
-  end
-
-  UI --> API
-  PANELS --> API
-  API --> AGENTS
-  AGENTS --> ADAPTERS
-  ADAPTERS --> FALKOR
-  ADAPTERS --> LASER
-  ADAPTERS --> ROCKET
-  ADAPTERS --> GUILD
-  AGENTS --> AUDIT
-  LASER --> SSE["SSE /api/runs/:id/events"]
-  SSE --> UI
-  SSE --> PANELS
+  LASER --> FALKOR
+  FALKOR --> ROCKET
+  ROCKET --> GUILD
+  ROCKET --> TOOLS
+  GUILD --> UI
+  TOOLS --> UI
 ```
+</details>
 
 ### The Four Layers
 
