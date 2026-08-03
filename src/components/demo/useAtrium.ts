@@ -307,6 +307,7 @@ export function useAtrium({ initialRunId }: { initialRunId?: string } = {}) {
 
   const canStart = stage === "idle" || stage === "complete";
   const canSimulate = stage === "awaiting_simulation";
+  const isCurriculumRun = Boolean(initialRunId);
 
   const stageLabel = useMemo(() => STAGE_LABEL[stage], [stage]);
 
@@ -338,5 +339,6 @@ export function useAtrium({ initialRunId }: { initialRunId?: string } = {}) {
     skipAnimation,
     canStart,
     canSimulate,
+    isCurriculumRun,
   };
 }

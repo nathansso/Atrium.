@@ -84,7 +84,27 @@ export function conceptForFirecrawlResult(
   if (/\bbias\b|\bfair(?:ness)?\b|\bethics?\b|\bresponsible\b|\bprivacy\b|\bsafety\b/.test(text)) {
     return suffix("responsible-use");
   }
+  if (/\bapplications?\b|\buse cases?\b|\bexamples?\b|\breal.world\b/.test(text)) {
+    return suffix("applications");
+  }
   return suffix("foundations");
+}
+
+/**
+ * A broad web query can return near-identical explainer pages. Search the
+ * instructional facets separately so a draft can form lessons from distinct,
+ * cited evidence instead of splitting a single concept arbitrarily.
+ */
+export function firecrawlSearchQueries(query: FirecrawlSearchQuery): string[] {
+  const teachingContext = `teaching ${query.audience}${
+    query.teachingIntent ? ` (${query.teachingIntent})` : ""
+  }`;
+  if (query.maxResults < 3) return [`${query.topic} - ${teachingContext}`];
+  return [
+    `${query.topic} foundations - ${teachingContext}`,
+    `${query.topic} examples and applications - ${teachingContext}`,
+    `${query.topic} responsible use limitations - ${teachingContext}`,
+  ];
 }
 
 async function postSearch(
@@ -148,18 +168,24 @@ export function createLiveFirecrawlAdapter(): FirecrawlResearchAdapter {
       if (!config.firecrawlApiKey) {
         throw new Error("FIRECRAWL_API_KEY is required for the live Firecrawl adapter.");
       }
+      const apiKey = config.firecrawlApiKey;
       const limit = Math.max(1, Math.min(query.maxResults, config.firecrawlMaxResults));
-      const searchQuery = `${query.topic} — teaching ${query.audience}${
-        query.teachingIntent ? ` (${query.teachingIntent})` : ""
-      }`;
-
-      const json = await postSearch(
-        { query: searchQuery, limit },
-        config.firecrawlApiKey,
+      const searchQueries = firecrawlSearchQueries({ ...query, maxResults: limit });
+      const perQueryLimit = Math.max(1, Math.ceil(limit / searchQueries.length));
+      const responses = await Promise.all(searchQueries.map((searchQuery) => postSearch(
+        { query: searchQuery, limit: perQueryLimit },
+        apiKey,
         config.firecrawlBaseUrl,
-      );
-
-      const results = extractResults(json).slice(0, limit);
+      )));
+      const uniqueUrls = new Set<string>();
+      const results = responses
+        .flatMap(extractResults)
+        .filter((result) => {
+          if (!result.url || uniqueUrls.has(result.url)) return false;
+          uniqueUrls.add(result.url);
+          return true;
+        })
+        .slice(0, limit);
       const retrievedAt = new Date().toISOString();
       const sources: ResearchSource[] = [];
       const claims: ResearchClaim[] = [];

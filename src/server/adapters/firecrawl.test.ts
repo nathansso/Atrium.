@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { researchClaimSchema, researchSourceSchema } from "@/contracts";
 import { getAdapterStatus, getAdapters, resetAdapters } from "./index";
 import { createMockFirecrawlAdapter } from "./firecrawlMock";
-import { conceptForFirecrawlResult } from "./firecrawlLive";
+import { conceptForFirecrawlResult, firecrawlSearchQueries } from "./firecrawlLive";
 
 const query = { topic: "AI literacy", audience: "high school", maxResults: 8 };
 
@@ -106,5 +106,18 @@ describe("live Firecrawl lesson classification", () => {
     expect(conceptForFirecrawlResult("machine learning", {
       title: "An introduction to machine learning",
     })).toBe("machine-learning:foundations");
+  });
+
+  it("diversifies normal research across teachable evidence facets", () => {
+    expect(firecrawlSearchQueries({
+      topic: "machine learning",
+      audience: "high school",
+      teachingIntent: "Use machine learning responsibly.",
+      maxResults: 8,
+    })).toEqual([
+      "machine learning foundations - teaching high school (Use machine learning responsibly.)",
+      "machine learning examples and applications - teaching high school (Use machine learning responsibly.)",
+      "machine learning responsible use limitations - teaching high school (Use machine learning responsibly.)",
+    ]);
   });
 });

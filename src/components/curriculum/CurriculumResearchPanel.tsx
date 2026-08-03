@@ -458,7 +458,7 @@ export function CurriculumResearchPanel() {
                     disabled={launchLoading}
                   >
                     <AtriumIcon name="classroom" size={19} />
-                    {launchLoading ? "Launching…" : "Launch learning run"}
+                    {launchLoading ? "Launching…" : "Start learning"}
                   </button>
                 )}
               </section>
@@ -528,6 +528,31 @@ export function CurriculumResearchPanel() {
               </section>
             </aside>
           </div>
+
+          <section
+            className="research-start-learning"
+            data-ready={approval === "approved"}
+            aria-label="Start the approved curriculum"
+          >
+            <div>
+              <span className="eyebrow">Ready for the classroom</span>
+              <h2>Start with lesson 1 of {draft.chunks.length}</h2>
+              <p>
+                {approval === "approved"
+                  ? "Open the first cited lesson in the classroom. The remaining lessons unlock in sequence."
+                  : "Approve this research draft to unlock its cited lesson sequence."}
+              </p>
+            </div>
+            <button
+              type="button"
+              className="primary-action research-start-learning__button"
+              onClick={() => void launch()}
+              disabled={approval !== "approved" || launchLoading}
+            >
+              <AtriumIcon name="classroom" size={21} />
+              {launchLoading ? "Launching…" : "Start learning"}
+            </button>
+          </section>
         </div>
       )}
     </div>
