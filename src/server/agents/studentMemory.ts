@@ -36,6 +36,32 @@ function baselineMastery(studentId: string, conceptId: ConceptId) {
   return { score: round4(score), confidence: 0.35, trend: "flat" as const };
 }
 
+/**
+ * A run may only expose mastery and patterns for concepts it actually teaches.
+ * Seeded Algebra history remains useful for Algebra runs, but must never leak
+ * into a researched curriculum such as Machine Learning.
+ */
+export function scopeStudentsToAssignment(
+  students: Student[],
+  analysis: AssignmentAnalysis,
+): Student[] {
+  const relevantConcepts = analysis.concepts.map((concept) => concept.concept_id);
+  const relevantSet = new Set(relevantConcepts);
+
+  return students.map((student) => ({
+    ...student,
+    mastery: Object.fromEntries(
+      relevantConcepts.map((conceptId) => [
+        conceptId,
+        student.mastery[conceptId] ?? baselineMastery(student.student_id, conceptId),
+      ]),
+    ),
+    recent_patterns: student.recent_patterns.filter((pattern) =>
+      relevantSet.has(misconceptionConcept[pattern]),
+    ),
+  }));
+}
+
 export function buildStudentContext(
   student: Student,
   analysis: AssignmentAnalysis,

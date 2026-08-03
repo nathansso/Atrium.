@@ -71,9 +71,18 @@ export function useAtrium({ initialRunId }: { initialRunId?: string } = {}) {
   const refreshLessonProgress = useCallback((runId: string) => {
     return getLessonProgress(runId).then(setLessonProgress).catch(() => setLessonProgress(null));
   }, []);
-  const [assignmentText, setAssignmentText] = useState(String(mockAssignment.source_text ?? ""));
-  const [teachingIntent, setTeachingIntent] = useState(String(mockAssignment.teaching_intent ?? ""));
-  const [assignmentTitle, setAssignmentTitle] = useState(mockAssignment.title);
+  // A curriculum URL must never paint the Algebra fixture while its canonical
+  // run is loading. The fixture remains available only for a new, unscoped
+  // demo session.
+  const [assignmentText, setAssignmentText] = useState(
+    initialRunId ? "" : String(mockAssignment.source_text ?? ""),
+  );
+  const [teachingIntent, setTeachingIntent] = useState(
+    initialRunId ? "" : String(mockAssignment.teaching_intent ?? ""),
+  );
+  const [assignmentTitle, setAssignmentTitle] = useState(
+    initialRunId ? "Loading lesson…" : mockAssignment.title,
+  );
 
   // Probe once so the badge can say "live API" or "mock replay" before any click.
   useEffect(() => {

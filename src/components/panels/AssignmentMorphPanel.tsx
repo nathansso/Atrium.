@@ -181,7 +181,7 @@ export function AssignmentMorphPanel({ projection }: { projection: RunProjection
             <>
               <p className="morph__meta">
                 {assignmentView.title} · {assignmentView.subject ?? assignmentView.course} ·{" "}
-                {assignmentView.grade_band ?? "Demo cohort"}
+                {assignmentView.grade_band ?? "Current cohort"}
               </p>
               <p className="morph__intent">
                 <strong>Teaching intent:</strong> {assignmentView.teaching_intent}
@@ -240,7 +240,7 @@ export function AssignmentMorphPanel({ projection }: { projection: RunProjection
               <LabelList values={layer.supports_applied ?? []} />
               <p className="prose">{layer.delivery_notes}</p>
               <p className="prose muted">
-                The mathematics is identical to the {humanize(roomId)} version above.
+                The academic content is identical to the {humanize(roomId)} version above.
                 Only delivery changes at this layer.
               </p>
               {layerProblems.length > 0 && (

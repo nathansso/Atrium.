@@ -1,5 +1,5 @@
 import {
-  conceptIds,
+  conceptIdSchema,
   misconceptionIds,
   roomIds,
   supportIds,
@@ -70,6 +70,12 @@ function inList<T extends string>(list: readonly T[], value: unknown): T | null 
     : null;
 }
 
+/** Concept IDs are run-scoped; only the room/support/misconception vocabularies are fixed. */
+function asConceptId(value: unknown): ConceptId | null {
+  const parsed = conceptIdSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
 export function readAssignment(payload: Payload): Assignment | null {
   const assignment = pickRecord(payload, "assignment");
   if (assignment && asString(assignment.assignment_id)) {
@@ -84,7 +90,7 @@ export function readConceptIds(payload: Payload): ConceptId[] {
   const out: ConceptId[] = [];
   for (const entry of entries) {
     const raw = isRecord(entry) ? entry.concept_id ?? entry.id : entry;
-    const id = inList(conceptIds, raw);
+    const id = asConceptId(raw);
     if (id && !out.includes(id)) out.push(id);
   }
   return out;
@@ -95,7 +101,7 @@ export function readConceptSummaries(payload: Payload): ConceptSummary[] {
   const out: ConceptSummary[] = [];
   for (const entry of entries) {
     if (!isRecord(entry)) continue;
-    const id = inList(conceptIds, entry.concept_id ?? entry.id);
+    const id = asConceptId(entry.concept_id ?? entry.id);
     if (!id) continue;
     out.push({
       concept_id: id,
@@ -105,8 +111,8 @@ export function readConceptSummaries(payload: Payload): ConceptSummary[] {
         (ref): ref is string => typeof ref === "string",
       ),
       prerequisite_of: pickArray(entry, "prerequisite_of")
-        .map((ref) => inList(conceptIds, ref))
-        .filter((ref): ref is (typeof conceptIds)[number] => ref !== null),
+        .map(asConceptId)
+        .filter((ref): ref is ConceptId => ref !== null),
     } as unknown as ConceptSummary);
   }
   return out;
@@ -269,7 +275,7 @@ export function readReviewItems(payload: Payload): ReviewItem[] {
 
 export function humanize(value: string): string {
   return value
-    .split(/[_.]/)
+    .split(/[_.:-]/)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
 }

@@ -15,6 +15,7 @@ import { runAssessmentAgent } from "@/server/agents/assessment";
 import { runClassroomEvolutionAgent } from "@/server/agents/classroomEvolution";
 import { runLessonPlanner } from "@/server/agents/lessonPlanner";
 import { trace } from "@/server/platform/guildWorkflow";
+import { hydrateRunMastery, writeRunMastery } from "@/server/platform/rocketRideDataPlane";
 import {
   drainEventsToStream,
   ingestSubmissions,
@@ -29,6 +30,10 @@ export async function simulateSubmissions(runId: string): Promise<RunState> {
     // Re-running the demo: rebuild from seed so the outcome is identical.
     resetRun(runId);
     run = await getOrCreateRun(runId);
+  }
+
+  if (run.assignment.source === "curriculum") {
+    await hydrateRunMastery(run);
   }
 
   const { submissions, answerKey } = run.assignment.source === "curriculum"
@@ -84,6 +89,9 @@ export async function simulateSubmissions(runId: string): Promise<RunState> {
   // 2. Classroom Evolution Agent updates mastery, scaffolding, and rooms.
   const previousRoomByStudent = roomByStudent(run);
   const evolution = runClassroomEvolutionAgent(run);
+  // Store the assessed, run-scoped values (not just the initial baselines)
+  // so the FalkorDB graph is evidence of learning in this lesson.
+  await writeRunMastery(run);
   const finalMoves = finalRoomMoves(run, previousRoomByStudent);
   emitRunEvent(run, "student.models.updated", "classroom_evolution_agent", {
     updated_student_count: run.students.length,

@@ -105,6 +105,47 @@ export async function syncClassroomMemory(input: {
   return syncClassroomGraph({ falkordb: getAdapters().falkordb, ...input });
 }
 
+/**
+ * Persist the current lesson's measured mastery after assessment.  Keeping
+ * this beside the initial graph sync makes FalkorDB the source of truth for
+ * the run-scoped learning record rather than a pre-run snapshot.
+ */
+export async function writeRunMastery(run: RunState): Promise<number> {
+  const concepts = run.concepts.map((concept) => concept.concept_id);
+  const updatedAt = new Date().toISOString();
+  return getAdapters().falkordb.upsertMastery(
+    run.students.flatMap((student) =>
+      concepts.flatMap((conceptId) => {
+        const mastery = student.mastery[conceptId];
+        return mastery
+          ? [{ student_id: student.student_id, concept_id: conceptId, mastery, updated_at: updatedAt }]
+          : [];
+      }),
+    ),
+  );
+}
+
+/**
+ * Refresh a lesson run from the durable Memory Library immediately before it
+ * is assessed. This lets a later curriculum chunk reuse measurements from an
+ * earlier chunk when they share a concept, despite runs being launched as an
+ * ordered sequence up front.
+ */
+export async function hydrateRunMastery(run: RunState): Promise<void> {
+  const concepts = run.concepts.map((concept) => concept.concept_id);
+  const graph = getAdapters().falkordb;
+  await Promise.all(
+    run.students.map(async (student) => {
+      const records = await Promise.all(
+        concepts.map((conceptId) => graph.getMastery(student.student_id, conceptId)),
+      );
+      for (const record of records.flat()) {
+        student.mastery[record.concept_id] = record.mastery;
+      }
+    }),
+  );
+}
+
 export function resetDataPlaneProgress(runId?: string): void {
   const counts = publishedCounts();
   if (runId) counts.delete(runId); else counts.clear();

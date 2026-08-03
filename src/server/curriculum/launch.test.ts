@@ -45,6 +45,20 @@ describe("approved curriculum launch", () => {
     expect(completed.status).toBe("planned");
     expect(completed.lesson_plan?.whole_class_intervention).toContain("cited example");
     expect(completed.events.map((event) => event.event_type)).toContain("lesson.plan.ready");
+    const lessonConcepts = completed.concepts.map((concept) => concept.concept_id).sort();
+    expect(lessonConcepts).toEqual(["ai:what-is-ai"]);
+    for (const student of completed.students) {
+      // The selected lesson owns the student view: no Algebra seed concepts
+      // or stale misconception patterns can leak into this curriculum run.
+      expect(Object.keys(student.mastery).sort()).toEqual(lessonConcepts);
+      expect(student.recent_patterns).toEqual([]);
+    }
+    const trajectory = await getAdapters().falkordb.masteryTrajectory(
+      completed.students[0].student_id,
+      lessonConcepts[0],
+    );
+    // Baseline plus the assessed update are both stored in FalkorDB.
+    expect(trajectory.length).toBeGreaterThanOrEqual(2);
     const sequence = findRecordByLessonRun(launched.run_id)?.launch?.lesson_runs;
     expect(sequence?.[1]?.run_id).toMatch(/^run_/);
     expect(getRun(launched.run_id)?.status).toBe("planned");

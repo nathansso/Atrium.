@@ -1,6 +1,6 @@
 "use client";
 
-import { conceptIds } from "@/contracts";
+import { conceptLabel, type ConceptId } from "@/contracts";
 import { ROOM_COLOR } from "@/world/layout";
 import { humanize } from "@/world/payloads";
 import {
@@ -25,6 +25,13 @@ export function StudentDetail({
   const previousRoomId = projection.previousStudentRoom[studentId];
   const assessment = assessmentFor(projection, studentId);
   const supports = projection.supports[studentId] ?? student?.supports ?? [];
+  const runConceptIds = projection.concepts.map((concept) => concept.concept_id);
+  const masteryConceptIds = [
+    ...runConceptIds.filter((conceptId) => student?.mastery[conceptId]),
+    ...Object.keys(student?.mastery ?? {})
+      .filter((conceptId) => !runConceptIds.includes(conceptId))
+      .sort(),
+  ] as ConceptId[];
 
   if (!student) {
     return (
@@ -67,13 +74,13 @@ export function StudentDetail({
         title="Mastery"
         subtitle="Estimate and confidence per concept, from the Memory Library."
       >
-        {conceptIds.map((conceptId) => {
+        {masteryConceptIds.map((conceptId) => {
           const estimate = student.mastery?.[conceptId];
           if (!estimate) return null;
           return (
             <Meter
               key={conceptId}
-              label={humanize(conceptId)}
+              label={conceptLabel(conceptId)}
               value={estimate.score}
               hint={`confidence ${Math.round(estimate.confidence * 100)}% · trend ${estimate.trend}`}
             />

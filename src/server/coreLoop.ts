@@ -27,7 +27,7 @@ import {
   updateRun,
 } from "./runStore";
 import { runAssignmentArchitect } from "./agents/assignmentArchitect";
-import { runStudentMemory } from "./agents/studentMemory";
+import { runStudentMemory, scopeStudentsToAssignment } from "./agents/studentMemory";
 import { runGrouping } from "./agents/grouping";
 import { runAccessibility } from "./agents/accessibility";
 import {
@@ -137,14 +137,14 @@ async function beginCoreRun(input: {
     extractionProvenance,
     runSponsorPipelines = true,
   } = input;
-  const students = getSeedStudents();
+  const seedStudents = getSeedStudents();
 
   const clock = new DeterministicClock();
   const runId = nextRunId({
     assignment_id: assignment.assignment_id,
     teaching_intent: teachingIntent,
     demo_mode: demoMode,
-    student_fingerprint: stableStringify(students.map((s) => s.student_id)),
+    student_fingerprint: stableStringify(seedStudents.map((s) => s.student_id)),
   });
 
   const initialState: RunState = {
@@ -155,7 +155,7 @@ async function beginCoreRun(input: {
     teaching_intent: teachingIntent,
     assignment,
     concepts: [],
-    students,
+    students: seedStudents,
     student_contexts: [],
     rooms: [],
     grouping: null,
@@ -223,9 +223,14 @@ async function beginCoreRun(input: {
     assignment,
     extractionProvenance,
   );
+  // Materialize one run-scoped memory view before any agent, graph, or UI
+  // event observes students. This prevents unrelated seed mastery from being
+  // displayed or persisted for a researched lesson.
+  const students = scopeStudentsToAssignment(seedStudents, architect.result);
   updateRun(runId, (state) => ({
     ...state,
     concepts: architect.result.concepts,
+    students,
   }));
   await recordAgentRun(runId, "assignment_architect", architect);
   await drainEventsToStream(updateRun(runId, (state) => state));
