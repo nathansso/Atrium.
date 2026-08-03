@@ -35,6 +35,7 @@ export function CommandRail({ controller }: { controller: AtriumController }) {
     notice,
     lessonProgress,
     nextLesson,
+    assignmentTitle,
   } = controller;
 
   const handleFile = async (file: File | undefined) => {
@@ -127,7 +128,12 @@ export function CommandRail({ controller }: { controller: AtriumController }) {
         <div className="run-setup__summary">
           <span className="eyebrow">Run setup</span>
           <div className="run-setup__title-row">
-            <h2 id="run-setup-title">{fileName ?? "Sample assignment"}</h2>
+            <h2 id="run-setup-title">{fileName ?? assignmentTitle}</h2>
+            {lessonProgress && (
+              <span className="run-setup__ready">
+                Lesson {lessonProgress.current.position + 1} of {lessonProgress.total_lessons}
+              </span>
+            )}
           </div>
           <p>{teachingIntent || "Add a teaching intent to guide the classroom agents."}</p>
         </div>

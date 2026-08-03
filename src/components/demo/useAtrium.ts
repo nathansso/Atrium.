@@ -11,6 +11,7 @@ import {
   createRun,
   getCurriculumEvidence,
   getLessonProgress,
+  getRun,
   type LessonProgress,
   simulateSubmissions,
 } from "@/world/api";
@@ -72,6 +73,7 @@ export function useAtrium({ initialRunId }: { initialRunId?: string } = {}) {
   }, []);
   const [assignmentText, setAssignmentText] = useState(String(mockAssignment.source_text ?? ""));
   const [teachingIntent, setTeachingIntent] = useState(String(mockAssignment.teaching_intent ?? ""));
+  const [assignmentTitle, setAssignmentTitle] = useState(mockAssignment.title);
 
   // Probe once so the badge can say "live API" or "mock replay" before any click.
   useEffect(() => {
@@ -141,6 +143,21 @@ export function useAtrium({ initialRunId }: { initialRunId?: string } = {}) {
     setBackendDetected(true);
     setStage("phase_one");
     setEvidence(null);
+    getRun(initialRunId)
+      .then((run) => {
+        // Hydrate from the canonical run record first. This avoids rendering
+        // the legacy Algebra sample while an SSE replay is still connecting.
+        setProjection((current) => ({
+          ...current,
+          runId: run.run_id,
+          status: run.status,
+          assignment: run.assignment,
+        }));
+        setAssignmentText(run.assignment.questions.map((question) => question.prompt).join("\n\n"));
+        setTeachingIntent(run.assignment.teaching_intent);
+        setAssignmentTitle(run.assignment.title);
+      })
+      .catch(() => setNotice("Could not load the launched lesson assignment."));
     getCurriculumEvidence(initialRunId)
       .then((result) => setEvidence({ nodes: result.nodes, edges: result.edges }))
       .catch(() => setNotice("Could not load the run's FalkorDB evidence graph."));
@@ -182,6 +199,7 @@ export function useAtrium({ initialRunId }: { initialRunId?: string } = {}) {
           teaching_intent: teachingIntent,
           title: mockAssignment.title,
         });
+        if (response.state?.assignment) setAssignmentTitle(response.state.assignment.title);
         const source = createSseSource(response.run_id, sink, {
           terminalEvents: ["approval.requested"],
           onError: () =>
@@ -308,6 +326,7 @@ export function useAtrium({ initialRunId }: { initialRunId?: string } = {}) {
     evidence,
     lessonProgress,
     nextLesson,
+    assignmentTitle,
     assignmentText,
     setAssignmentText,
     teachingIntent,
