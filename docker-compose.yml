@@ -1,0 +1,44 @@
+# Atrium local sponsor infrastructure.
+#
+#   docker compose up -d
+#
+# Brings up the two sponsors that run locally: FalkorDB (memory) and Apache
+# Iggy (the transport behind LaserData). RocketRide and Guild.ai are hosted
+# services and need accounts — see .env.example.
+#
+# Port note: Next.js dev, Iggy HTTP and FalkorDB's browser UI all default to
+# 3000. Next moves to 3001 (see package.json) and FalkorDB's UI to 3002, so
+# all three can run at once.
+
+services:
+  falkordb:
+    image: falkordb/falkordb:latest
+    container_name: atrium-falkordb
+    ports:
+      - "6379:6379" # Redis protocol — FALKORDB_URL points here
+      - "3002:3000" # Browser UI: http://localhost:3002
+    volumes:
+      - falkordb-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  iggy:
+    image: apache/iggy:0.8.1-edge.3 # pinned: the Laser SDK targets this build
+    container_name: atrium-iggy
+    ports:
+      - "8090:8090" # TCP — LASER_CONNECTION_STRING points here
+      - "3000:3000" # HTTP
+    volumes:
+      - iggy-data:/local_data
+    healthcheck:
+      test: ["CMD", "sh", "-c", "nc -z 127.0.0.1 8090"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  falkordb-data:
+  iggy-data:

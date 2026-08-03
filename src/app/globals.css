@@ -1,0 +1,1667 @@
+@import "./fonts.css";
+
+/**
+ * Atrium UI — Minecraft-derived interface language.
+ *
+ * The world canvas is pixel art, so the chrome around it is built from the same
+ * vocabulary rather than a generic dashboard skin:
+ *
+ *   - Beveled stone plates. Every raised surface has a light top/left edge and a
+ *     dark bottom/right edge, drawn with hard box-shadow insets. No border-radius
+ *     anywhere; nothing in Minecraft is round.
+ *   - Inset slots. Wells (inputs, hotbar cells, list rows) invert the bevel so
+ *     they read as carved into the plate.
+ *   - Hard text shadow. Pixel type carries a 2px offset shadow, the way Minecraft
+ *     renders every string.
+ *   - Segmented meters. Progress reads as discrete XP-bar notches, not a smooth
+ *     gradient, so a value is countable at a glance.
+ *
+ * The deliberate deviation: Minecraft uses one font for everything. This UI
+ * carries real prose (agent rationale, evidence, misconception narratives), so
+ * pixel faces are reserved for labels, headings and numbers, and body copy is set
+ * in a legible sans. Readability wins over purity where the content is long.
+ */
+
+:root {
+  /* Neutrals carry a blue-violet bias so the chrome belongs to the night world
+     on the canvas rather than sitting on it as neutral grey. */
+  --void: #12171d;
+  --stone: #1c2128;
+  --stone-raised: #262d36;
+  --stone-hi: #3a4551;
+  --stone-lo: #101015;
+  --slot: #15151c;
+  --slot-lo: #0a0a0f;
+
+  --gold: #f0a848;
+  --gold-dim: #a8802c;
+  --xp: #7be04a;
+  --warn: #ffc64d;
+  --danger: #ff6b5b;
+  --aqua: #4dd0e1;
+
+  --text: #d8dee6;
+  --text-dim: #8896a4;
+  --text-faint: #65727f;
+  --text-on-gold: #1a1206;
+
+  --room-ember: #c8875d;
+  --room-forge: #ad625c;
+  --room-harbor: #5a91aa;
+  --room-summit: #887dbb;
+
+  --px: 4px;
+  --bevel: 0;
+
+  --font-display: var(--font-mono);
+  --font-label: "Silkscreen", ui-monospace, monospace;
+  --font-body: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --shadow-text: 2px 2px 0 rgba(0, 0, 0, 0.65);
+}
+
+/* The world commits to a single night-time visual world, so the palette does not
+   invert. The toggle still gets a response: the plates lift and contrast rises so
+   the UI stays legible in a bright room. */
+@media (prefers-color-scheme: light) {
+  :root {
+    --stone: #242b33;
+    --stone-raised: #303945;
+    --stone-hi: #526170;
+    --text-dim: #a5b0bc;
+    --text-faint: #7e8b98;
+  }
+}
+
+:root[data-theme="light"] {
+  --stone: #242b33;
+  --stone-raised: #303945;
+  --stone-hi: #526170;
+  --text-dim: #a5b0bc;
+  --text-faint: #7e8b98;
+}
+
+:root[data-theme="dark"] {
+  --stone: #1c2128;
+  --stone-raised: #262d36;
+  --stone-hi: #3a4551;
+  --text-dim: #8896a4;
+  --text-faint: #65727f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--void);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Faint dot-grid, the texture of a build grid seen from above. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+:focus-visible {
+  outline: 1px solid var(--gold);
+  outline-offset: 2px;
+}
+
+code,
+pre {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.muted {
+  color: var(--text-faint);
+}
+
+.prose {
+  margin: 0 0 8px;
+  color: var(--text-dim);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ------------------------------------------------- beveled plate primitives */
+
+/* Raised plate: light edge top+left, dark edge bottom+right. */
+.plate {
+  background: var(--stone);
+  box-shadow:
+    inset var(--bevel) var(--bevel) 0 0 var(--stone-hi),
+    inset calc(var(--bevel) * -1) calc(var(--bevel) * -1) 0 0 var(--stone-lo);
+}
+
+/* Inset well: the same bevel, inverted, so it reads as carved in. */
+.well {
+  background: var(--slot);
+  box-shadow:
+    inset var(--bevel) var(--bevel) 0 0 var(--slot-lo),
+    inset calc(var(--bevel) * -1) calc(var(--bevel) * -1) 0 0 var(--stone-hi);
+}
+
+/* ---------------------------------------------------------------- layout */
+
+.app {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  max-width: 1720px;
+  margin: 0 auto;
+}
+
+.app__main {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(348px, 0.85fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.app__world {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.app__side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  position: sticky;
+  top: 14px;
+  max-height: calc(100vh - 28px);
+}
+
+@media (max-width: 1100px) {
+  .app__main {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app__side {
+    position: static;
+    max-height: none;
+  }
+}
+
+/* ----------------------------------------------------------- command rail */
+
+.rail {
+  background: var(--stone);
+  box-shadow:
+    inset var(--bevel) var(--bevel) 0 0 var(--stone-hi),
+    inset calc(var(--bevel) * -1) calc(var(--bevel) * -1) 0 0 var(--stone-lo);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rail__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.rail__brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* A single grass block, drawn with gradients: dirt body, grass cap, top face. */
+.rail__logo {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  image-rendering: pixelated;
+  background:
+    linear-gradient(#7be04a 0 26%, #5aa832 26% 34%, #8b6239 34% 78%, #6b4a2a 78% 100%);
+  box-shadow:
+    inset 3px 3px 0 0 rgba(255, 255, 255, 0.28),
+    inset -3px -3px 0 0 rgba(0, 0, 0, 0.45);
+}
+
+.rail__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 17px;
+  letter-spacing: 0.02em;
+  text-shadow: var(--shadow-text);
+  color: var(--text);
+}
+
+.rail__tagline {
+  margin: 5px 0 0;
+  font-family: var(--font-label);
+  color: var(--text-faint);
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+
+.rail__controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.rail__file {
+  display: none;
+}
+
+.rail__status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.rail__spacer {
+  flex: 1 1 auto;
+}
+
+.rail__notice {
+  margin: 0;
+  padding: 9px 12px;
+  background: var(--slot);
+  box-shadow:
+    inset var(--bevel) var(--bevel) 0 0 var(--slot-lo),
+    inset calc(var(--bevel) * -1) calc(var(--bevel) * -1) 0 0 var(--stone-hi);
+  color: var(--warn);
+  font-family: var(--font-label);
+  font-size: 13px;
+  letter-spacing: 0.01em;
+}
+
+.rail__notice--quiet {
+  color: var(--text-dim);
+}
+
+.rail__editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+@media (max-width: 780px) {
+  .rail__editor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field__label {
+  font-family: var(--font-label);
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-faint);
+}
+
+.field textarea {
+  width: 100%;
+  background: var(--slot);
+  border: 0;
+  box-shadow:
+    inset var(--bevel) var(--bevel) 0 0 var(--slot-lo),
+    inset calc(var(--bevel) * -1) calc(var(--bevel) * -1) 0 0 var(--stone-hi);
+  color: var(--text);
+  padding: 10px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  resize: vertical;
+}
+
+/* -------------------------------------------------------------- buttons */
+
+/* Minecraft button: raised plate, hard bevel, hard text shadow, and a press
+   that actually sinks the bevel rather than fading opacity. */
+.button {
+  position: relative;
+  border: 0;
+  background: var(--stone-raised);
+  box-shadow:
+    inset var(--bevel) var(--bevel) 0 0 var(--stone-hi),
+    inset calc(var(--bevel) * -1) calc(var(--bevel) * -1) 0 0 var(--stone-lo);
+  padding: 11px 16px;
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--text);
+  text-shadow: var(--shadow-text);
+  transition: background 90ms steps(2), color 90ms steps(2);
+}
+
+.button:hover:not(:disabled) {
+  background: #3d3d4b;
+  color: var(--gold);
+}
+
+.button:active:not(:disabled) {
+  box-shadow:
+    inset var(--bevel) var(--bevel) 0 0 var(--stone-lo),
+    inset calc(var(--bevel) * -1) calc(var(--bevel) * -1) 0 0 var(--stone-hi);
+}
+
+.button:disabled {
+  background: #1e1e26;
+  color: #55556a;
+  text-shadow: none;
+  box-shadow:
+    inset var(--bevel) var(--bevel) 0 0 #2a2a34,
+    inset calc(var(--bevel) * -1) calc(var(--bevel) * -1) 0 0 var(--stone-lo);
+}
+
+.button--primary {
+  background: var(--gold-dim);
+  color: var(--text-on-gold);
+  text-shadow: 2px 2px 0 rgba(255, 255, 255, 0.18);
+  box-shadow:
+    inset var(--bevel) var(--bevel) 0 0 #ffdb8f,
+    inset calc(var(--bevel) * -1) calc(var(--bevel) * -1) 0 0 #6b4d12;
+}
+
+.button--primary:hover:not(:disabled) {
+  background: var(--gold);
+  color: var(--text-on-gold);
+}
+
+/* The one action the demo wants you to press next. */
+.button--ready {
+  animation: readyPulse 1.6s steps(2) infinite;
+}
+
+@keyframes readyPulse {
+  0%,
+  100% {
+    background: var(--gold-dim);
+  }
+  50% {
+    background: var(--gold);
+  }
+}
+
+.chip-button {
+  border: 0;
+  background: var(--stone-raised);
+  box-shadow:
+    inset 2px 2px 0 0 var(--stone-hi),
+    inset -2px -2px 0 0 var(--stone-lo);
+  padding: 6px 11px;
+  font-family: var(--font-label);
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  color: var(--text-dim);
+}
+
+.chip-button:hover {
+  color: var(--gold);
+  background: #3d3d4b;
+}
+
+.chip-button:active {
+  box-shadow:
+    inset 2px 2px 0 0 var(--stone-lo),
+    inset -2px -2px 0 0 var(--stone-hi);
+}
+
+.chip-button--tiny {
+  padding: 4px 9px;
+  font-size: 12px;
+}
+
+.badge {
+  padding: 5px 10px;
+  font-family: var(--font-label);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  background: var(--slot);
+  box-shadow:
+    inset 2px 2px 0 0 var(--slot-lo),
+    inset -2px -2px 0 0 var(--stone-hi);
+}
+
+.badge--live {
+  color: var(--xp);
+}
+
+.badge--mock {
+  color: var(--aqua);
+}
+
+.badge--stage-complete {
+  color: var(--xp);
+}
+
+.speed {
+  border: 0;
+  background: var(--stone-raised);
+  box-shadow:
+    inset 2px 2px 0 0 var(--stone-hi),
+    inset -2px -2px 0 0 var(--stone-lo);
+  padding: 5px 9px;
+  font-family: var(--font-label);
+  font-size: 13px;
+  color: var(--text-faint);
+}
+
+.speed--active {
+  background: var(--gold-dim);
+  color: var(--text-on-gold);
+  box-shadow:
+    inset 2px 2px 0 0 #ffdb8f,
+    inset -2px -2px 0 0 #6b4d12;
+}
+
+.rail__speed {
+  display: inline-flex;
+  gap: 3px;
+}
+
+/* ------------------------------------------------------- hotbar timeline */
+
+/* The eleven contract events as inventory slots. Discrete cells make pipeline
+   progress countable at a glance in a way a thin progress bar cannot. */
+.hotbar {
+  background: var(--stone);
+  box-shadow:
+    inset var(--bevel) var(--bevel) 0 0 var(--stone-hi),
+    inset calc(var(--bevel) * -1) calc(var(--bevel) * -1) 0 0 var(--stone-lo);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hotbar__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.hotbar__title {
+  margin: 0;
+  font-family: var(--font-label);
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-faint);
+}
+
+.hotbar__count {
+  font-family: var(--font-label);
+  font-size: 13px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.hotbar__slots {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(11, minmax(0, 1fr));
+  gap: 4px;
+}
+
+@media (max-width: 900px) {
+  .hotbar__slots {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .hotbar__slots {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.slot {
+  position: relative;
+  width: 100%;
+  /* Grid tracks can shrink below the label's intrinsic width; without this the
+     buttons refuse to compress and push the page into horizontal scroll. */
+  min-width: 0;
+  overflow: hidden;
+  border: 0;
+  background: var(--slot);
+  box-shadow:
+    inset 3px 3px 0 0 var(--slot-lo),
+    inset -3px -3px 0 0 #35354a;
+  padding: 7px 4px 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-faint);
+}
+
+.slot__glyph {
+  width: 18px;
+  height: 18px;
+  image-rendering: pixelated;
+  background: #2b2b38;
+  box-shadow:
+    inset 2px 2px 0 0 rgba(255, 255, 255, 0.07),
+    inset -2px -2px 0 0 rgba(0, 0, 0, 0.45);
+}
+
+.slot__label {
+  font-family: var(--font-label);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-align: center;
+  line-height: 1.15;
+  color: inherit;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+/* The number that selects this slot from the keyboard. */
+.slot__key {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  font-family: var(--font-label);
+  font-size: 10px;
+  color: #3f3f52;
+}
+
+.slot--done {
+  color: var(--text);
+}
+
+.slot--done .slot__key {
+  color: var(--text-faint);
+}
+
+.slot--done .slot__glyph {
+  background: var(--gold);
+  box-shadow:
+    inset 2px 2px 0 0 rgba(255, 255, 255, 0.55),
+    inset -2px -2px 0 0 rgba(0, 0, 0, 0.4);
+}
+
+.slot--done:hover {
+  background: #1e1e2a;
+}
+
+/* Minecraft's selected-hotbar-slot frame: a white box that overhangs the cell. */
+.slot--active::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  box-shadow: inset 0 0 0 3px #ffffff;
+  pointer-events: none;
+}
+
+.slot:disabled {
+  cursor: default;
+}
+
+/* ---------------------------------------------------------------- stage */
+
+.stage {
+  background: var(--stone);
+  box-shadow:
+    inset var(--bevel) var(--bevel) 0 0 var(--stone-hi),
+    inset calc(var(--bevel) * -1) calc(var(--bevel) * -1) 0 0 var(--stone-lo);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.stage__frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 680 / 470;
+  background: #0a0e1c;
+  overflow: hidden;
+  box-shadow:
+    inset var(--bevel) var(--bevel) 0 0 var(--slot-lo),
+    inset calc(var(--bevel) * -1) calc(var(--bevel) * -1) 0 0 var(--stone-hi);
+}
+
+.stage__canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.stage__labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.stage__label {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  border: 0;
+  background: rgba(11, 13, 20, 0.86);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.14);
+  padding: 3px 8px;
+  font-family: var(--font-label);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: var(--text-dim);
+  text-shadow: var(--shadow-text);
+}
+
+.stage__label:hover,
+.stage__label--active {
+  color: var(--gold);
+  box-shadow: inset 0 0 0 2px var(--gold);
+  background: rgba(11, 13, 20, 0.96);
+}
+
+@media (max-width: 720px) {
+  .stage__label:not(.stage__label--room) {
+    display: none;
+  }
+
+  .stage__label {
+    padding: 2px 4px;
+    background: transparent;
+    box-shadow: none;
+  }
+}
+
+.stage__label-count {
+  background: var(--gold);
+  color: var(--text-on-gold);
+  min-width: 16px;
+  text-align: center;
+  padding: 0 4px;
+  text-shadow: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.stage__footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.stage__hint {
+  margin: 0;
+  color: var(--text-faint);
+  font-family: var(--font-label);
+  font-size: 13px;
+}
+
+.stage__a11y {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+  padding-top: 10px;
+  box-shadow: inset 0 2px 0 0 rgba(0, 0, 0, 0.4);
+}
+
+.stage__a11y-title {
+  font-family: var(--font-label);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-faint);
+  margin-right: 4px;
+}
+
+/* --------------------------------------------------------------- panels */
+
+.panel {
+  background: var(--stone);
+  box-shadow:
+    inset var(--bevel) var(--bevel) 0 0 var(--stone-hi),
+    inset calc(var(--bevel) * -1) calc(var(--bevel) * -1) 0 0 var(--stone-lo);
+  padding: 14px;
+}
+
+.panel--detail {
+  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 260px;
+}
+
+.detail__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  padding-bottom: 12px;
+  box-shadow: inset 0 -2px 0 0 rgba(0, 0, 0, 0.4);
+}
+
+.detail__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 13px;
+  line-height: 1.5;
+  text-wrap: balance;
+  text-shadow: var(--shadow-text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.detail__subtitle {
+  margin: 6px 0 0;
+  font-family: var(--font-label);
+  color: var(--text-faint);
+  font-size: 13px;
+}
+
+.detail__swatch {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  box-shadow:
+    inset 2px 2px 0 0 rgba(255, 255, 255, 0.4),
+    inset -2px -2px 0 0 rgba(0, 0, 0, 0.4);
+}
+
+.detail__banner {
+  margin: 12px 0 0;
+  padding: 9px 12px;
+  background: var(--slot);
+  box-shadow:
+    inset 2px 2px 0 0 var(--slot-lo),
+    inset -2px -2px 0 0 var(--stone-hi);
+  color: var(--xp);
+  font-family: var(--font-label);
+  font-size: 13px;
+}
+
+.section {
+  padding: 14px 0;
+  box-shadow: inset 0 -2px 0 0 rgba(0, 0, 0, 0.35);
+}
+
+.section:last-child {
+  box-shadow: none;
+}
+
+.section__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.section__title {
+  margin: 0;
+  font-family: var(--font-label);
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--gold);
+  text-shadow: var(--shadow-text);
+}
+
+.section__subtitle {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  color: var(--text-faint);
+  max-width: 62ch;
+}
+
+.section__body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  padding: 4px 9px;
+  font-family: var(--font-label);
+  font-size: 12.5px;
+  letter-spacing: 0.02em;
+  color: var(--text-dim);
+  background: var(--slot);
+  box-shadow:
+    inset 2px 2px 0 0 var(--slot-lo),
+    inset -2px -2px 0 0 #35354a;
+}
+
+.chip--good {
+  color: var(--xp);
+}
+
+.chip--warn {
+  color: var(--warn);
+}
+
+.chip--bad {
+  color: var(--danger);
+}
+
+.chip--accent {
+  color: var(--gold);
+}
+
+.label-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+/* --------------------------------------------------------------- meters */
+
+/* Segmented like an XP bar: twenty notches, so a value can be counted. */
+.meter {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.meter__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.meter__label {
+  font-family: var(--font-label);
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.meter__value {
+  font-family: var(--font-label);
+  font-size: 13px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.meter__track {
+  display: grid;
+  grid-template-columns: repeat(20, 1fr);
+  gap: 2px;
+  padding: 3px;
+  background: var(--slot);
+  box-shadow:
+    inset 2px 2px 0 0 var(--slot-lo),
+    inset -2px -2px 0 0 #35354a;
+}
+
+.meter__notch {
+  height: 9px;
+  background: #1e1e28;
+}
+
+.meter__notch--on {
+  background: currentcolor;
+}
+
+.meter--good {
+  color: var(--xp);
+}
+
+.meter--warn {
+  color: var(--warn);
+}
+
+.meter--bad {
+  color: var(--danger);
+}
+
+.meter__hint {
+  font-family: var(--font-label);
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+/* ------------------------------------------------------------- evidence */
+
+.evidence {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.evidence__item code {
+  display: inline-block;
+  color: var(--text-dim);
+  background: var(--slot);
+  box-shadow:
+    inset 2px 2px 0 0 var(--slot-lo),
+    inset -2px -2px 0 0 #35354a;
+  padding: 3px 8px;
+  word-break: break-all;
+}
+
+.kv {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.kv__key {
+  font-family: var(--font-label);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-faint);
+}
+
+.empty {
+  padding: 28px 14px;
+  text-align: center;
+}
+
+.empty__title {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text);
+  text-shadow: var(--shadow-text);
+  text-wrap: balance;
+}
+
+.empty__body {
+  margin: 0 auto;
+  color: var(--text-faint);
+  font-size: 13px;
+  max-width: 44ch;
+}
+
+/* --------------------------------------------------------------- members */
+
+.member-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 6px;
+}
+
+.member {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  text-align: left;
+  border: 0;
+  background: var(--slot);
+  box-shadow:
+    inset 2px 2px 0 0 var(--slot-lo),
+    inset -2px -2px 0 0 #35354a;
+  padding: 9px 10px;
+}
+
+.member:hover {
+  background: #1e1e2a;
+  box-shadow:
+    inset 2px 2px 0 0 var(--slot-lo),
+    inset -2px -2px 0 0 var(--gold);
+}
+
+.member--flagged {
+  box-shadow:
+    inset 2px 2px 0 0 var(--slot-lo),
+    inset -2px -2px 0 0 var(--danger);
+}
+
+.member__name {
+  font-family: var(--font-label);
+  font-size: 14px;
+  color: var(--text);
+}
+
+.member__meta {
+  font-family: var(--font-label);
+  font-size: 12px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.room-pill {
+  border: 0;
+  padding: 5px 11px;
+  font-family: var(--font-label);
+  font-size: 13px;
+  color: #14100a;
+  box-shadow:
+    inset 2px 2px 0 0 rgba(255, 255, 255, 0.42),
+    inset -2px -2px 0 0 rgba(0, 0, 0, 0.4);
+}
+
+.agent-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.agent-list__item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  background: var(--slot);
+  box-shadow:
+    inset 2px 2px 0 0 var(--slot-lo),
+    inset -2px -2px 0 0 #35354a;
+  font-family: var(--font-label);
+  font-size: 13px;
+}
+
+.agent-list__name {
+  color: var(--text-dim);
+}
+
+.json {
+  margin: 0;
+  padding: 11px;
+  background: var(--slot);
+  box-shadow:
+    inset 2px 2px 0 0 var(--slot-lo),
+    inset -2px -2px 0 0 #35354a;
+  overflow-x: auto;
+  max-height: 340px;
+  overflow-y: auto;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.plan-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  counter-reset: plan;
+}
+
+.plan-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: var(--slot);
+  box-shadow:
+    inset 2px 2px 0 0 var(--slot-lo),
+    inset -2px -2px 0 0 #35354a;
+  padding: 9px 10px;
+}
+
+.plan-item:hover {
+  background: #1e1e2a;
+  box-shadow:
+    inset 2px 2px 0 0 var(--slot-lo),
+    inset -2px -2px 0 0 var(--gold);
+}
+
+.plan-item__title {
+  font-family: var(--font-label);
+  font-size: 14px;
+  color: var(--text);
+}
+
+.plan-item__meta {
+  font-family: var(--font-label);
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+/* ----------------------------------------------------------------- morph */
+
+.morph {
+  background: var(--stone);
+  box-shadow:
+    inset var(--bevel) var(--bevel) 0 0 var(--stone-hi),
+    inset calc(var(--bevel) * -1) calc(var(--bevel) * -1) 0 0 var(--stone-lo);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.morph__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.segmented {
+  display: inline-flex;
+  gap: 3px;
+  align-self: flex-start;
+}
+
+.segmented__option {
+  border: 0;
+  background: var(--stone-raised);
+  box-shadow:
+    inset 2px 2px 0 0 var(--stone-hi),
+    inset -2px -2px 0 0 var(--stone-lo);
+  padding: 8px 16px;
+  font-family: var(--font-label);
+  font-size: 13.5px;
+  letter-spacing: 0.03em;
+  color: var(--text-faint);
+}
+
+.segmented__option:hover {
+  color: var(--gold);
+}
+
+.segmented__option--active {
+  background: var(--gold-dim);
+  color: var(--text-on-gold);
+  box-shadow:
+    inset 2px 2px 0 0 #ffdb8f,
+    inset -2px -2px 0 0 #6b4d12;
+}
+
+.morph__selectors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.morph__rooms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.room-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: var(--slot);
+  box-shadow:
+    inset 2px 2px 0 0 var(--slot-lo),
+    inset -2px -2px 0 0 #35354a;
+  padding: 6px 11px;
+  font-family: var(--font-label);
+  font-size: 13px;
+  color: var(--text-faint);
+}
+
+.room-tab:hover {
+  color: var(--text);
+}
+
+.room-tab--active {
+  color: var(--text);
+  background: #1e1e2a;
+}
+
+.room-tab__dot {
+  width: 10px;
+  height: 10px;
+  box-shadow:
+    inset 2px 2px 0 0 rgba(255, 255, 255, 0.4),
+    inset -2px -2px 0 0 rgba(0, 0, 0, 0.4);
+}
+
+.morph__student {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-label);
+  font-size: 13px;
+  color: var(--text-faint);
+}
+
+.morph__student select {
+  background: var(--slot);
+  border: 0;
+  box-shadow:
+    inset 2px 2px 0 0 var(--slot-lo),
+    inset -2px -2px 0 0 #35354a;
+  color: var(--text);
+  padding: 6px 10px;
+  font-family: var(--font-label);
+  font-size: 13px;
+}
+
+.morph__body {
+  min-height: 160px;
+}
+
+.morph__meta {
+  margin: 0 0 6px;
+  font-family: var(--font-label);
+  font-size: 14px;
+  color: var(--text);
+}
+
+.morph__intent {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--text-dim);
+  max-width: 68ch;
+}
+
+.problem-list {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  counter-reset: problem;
+}
+
+.problem-list li {
+  counter-increment: problem;
+  background: var(--slot);
+  box-shadow:
+    inset 2px 2px 0 0 var(--slot-lo),
+    inset -2px -2px 0 0 #35354a;
+  padding: 9px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.problem-list li::before {
+  content: counter(problem, decimal-leading-zero);
+  font-family: var(--font-label);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--gold-dim);
+}
+
+.problem__prompt {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+/* ------------------------------------------------------------------ feed */
+
+/* Reads as a Minecraft chat log: dark translucent well, monospace lines, a
+   colored square per speaker. */
+.feed {
+  background: var(--stone);
+  box-shadow:
+    inset var(--bevel) var(--bevel) 0 0 var(--stone-hi),
+    inset calc(var(--bevel) * -1) calc(var(--bevel) * -1) 0 0 var(--stone-lo);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 0 0 auto;
+  max-height: 42vh;
+}
+
+.feed__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.feed__count {
+  font-family: var(--font-label);
+  font-size: 12px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.feed__empty {
+  margin: 0;
+  font-family: var(--font-label);
+  font-size: 13px;
+}
+
+.feed__list {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  overflow-y: auto;
+  background: rgba(0, 0, 0, 0.42);
+  box-shadow:
+    inset 2px 2px 0 0 var(--slot-lo),
+    inset -2px -2px 0 0 #35354a;
+}
+
+.feed__item {
+  display: flex;
+  gap: 9px;
+  width: 100%;
+  text-align: left;
+  align-items: flex-start;
+  border: 0;
+  background: transparent;
+  padding: 6px 8px;
+}
+
+.feed__item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.feed__item--active {
+  background: rgba(255, 198, 77, 0.14);
+  box-shadow: inset 0 0 0 2px var(--gold);
+}
+
+.feed__dot {
+  width: 9px;
+  height: 9px;
+  margin-top: 5px;
+  flex: none;
+  box-shadow:
+    inset 2px 2px 0 0 rgba(255, 255, 255, 0.4),
+    inset -2px -2px 0 0 rgba(0, 0, 0, 0.4);
+}
+
+.feed__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 1px;
+}
+
+.feed__type {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--gold);
+}
+
+.feed__summary {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.feed__agent {
+  font-family: var(--font-label);
+  font-size: 11px;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+@media (max-width: 1100px) {
+  .feed {
+    max-height: none;
+  }
+}
+
+/* ---------------------------------------------------------------- toasts */
+
+/* Minecraft advancement toast: a plate that slides in from the right, holds,
+   and leaves. This is the UX fix for events you would otherwise miss while
+   watching the world instead of the feed. */
+/* Bottom-right, not Minecraft's top-right: the command rail lives up there and
+   a toast that covers the controls is worse than one that is slightly off-canon. */
+.toasts {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+  max-width: min(360px, calc(100vw - 32px));
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #1c1a10;
+  box-shadow:
+    inset 3px 3px 0 0 #6b5a2a,
+    inset -3px -3px 0 0 #0a0904;
+  animation: toastIn 220ms steps(4) both;
+}
+
+.toast--leaving {
+  animation: toastOut 220ms steps(4) both;
+}
+
+@keyframes toastIn {
+  from {
+    transform: translateX(120%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes toastOut {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(120%);
+    opacity: 0;
+  }
+}
+
+.toast__icon {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  image-rendering: pixelated;
+  box-shadow:
+    inset 2px 2px 0 0 rgba(255, 255, 255, 0.4),
+    inset -2px -2px 0 0 rgba(0, 0, 0, 0.45);
+}
+
+.toast__text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.toast__kicker {
+  font-family: var(--font-label);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--gold);
+  text-shadow: var(--shadow-text);
+}
+
+.toast__body {
+  font-family: var(--font-label);
+  font-size: 13px;
+  color: var(--text);
+  text-shadow: var(--shadow-text);
+}
+
+/* --------------------------------------------------------------- tooltip */
+
+/* Minecraft item tooltip: near-black plate with a violet border. */
+[data-tip] {
+  position: relative;
+}
+
+/* The tip box is only generated on hover. An always-present `opacity: 0` box
+   still occupies layout, and a row of nowrap tips was silently widening the
+   document's scroll area on narrow screens. */
+[data-tip]::after {
+  content: none;
+}
+
+[data-tip]:hover::after,
+[data-tip]:focus-visible::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  width: max-content;
+  max-width: 240px;
+  padding: 5px 9px;
+  background: #100010;
+  box-shadow: inset 0 0 0 2px #4b2ea8;
+  color: var(--text);
+  font-family: var(--font-label);
+  font-size: 12px;
+  line-height: 1.35;
+  text-shadow: var(--shadow-text);
+  pointer-events: none;
+}
+
+/* A disabled control must never explain itself in a floating box that outlives
+   the pointer — the tip would sit over the layout with nothing to dismiss it. */
+[data-tip]:disabled::after,
+[data-tip][aria-disabled="true"]::after {
+  content: none;
+}
+
+/* Slots sit in a tight grid, so edge tooltips anchor inward instead of centring
+   and hanging off the viewport. */
+.hotbar__slots li:first-child [data-tip]:hover::after,
+.hotbar__slots li:first-child [data-tip]:focus-visible::after {
+  left: 0;
+  transform: none;
+}
+
+.hotbar__slots li:last-child [data-tip]:hover::after,
+.hotbar__slots li:last-child [data-tip]:focus-visible::after {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+
+/* Hover tips are meaningless on touch; the aria-labels still carry the text. */
+@media (max-width: 720px), (hover: none) {
+  [data-tip]:hover::after,
+  [data-tip]:focus-visible::after {
+    content: none;
+  }
+}
+
+/* --------------------------------------------------------------- helpbar */
+
+.helpbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--slot);
+  box-shadow:
+    inset 2px 2px 0 0 var(--slot-lo),
+    inset -2px -2px 0 0 #35354a;
+  font-family: var(--font-label);
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.helpbar kbd {
+  display: inline-block;
+  min-width: 20px;
+  text-align: center;
+  padding: 2px 5px;
+  margin-right: 5px;
+  background: var(--stone-raised);
+  box-shadow:
+    inset 2px 2px 0 0 var(--stone-hi),
+    inset -2px -2px 0 0 var(--stone-lo);
+  font-family: var(--font-label);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* Factory-schematic finish: flat plates, registration corners, and hatched idle states. */
+.plate, .well, .panel, .button, .chip-button, .slot, .stage__frame {
+  border: 1px solid var(--stone-hi);
+  box-shadow: none;
+  background-image: linear-gradient(var(--gold), var(--gold)), linear-gradient(var(--gold), var(--gold)), linear-gradient(var(--gold), var(--gold)), linear-gradient(var(--gold), var(--gold));
+  background-position: left top, left top, right bottom, right bottom;
+  background-repeat: no-repeat;
+  background-size: 7px 1px, 1px 7px, 7px 1px, 1px 7px;
+}
+.button:disabled, .slot:disabled, [aria-disabled="true"] {
+  background-image: repeating-linear-gradient(135deg, transparent 0 5px, rgba(136, 150, 164, 0.12) 5px 7px);
+}
+button, .eyebrow, .panel__title, .stage__label, .field__label {
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
