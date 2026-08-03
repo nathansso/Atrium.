@@ -197,7 +197,7 @@ export function useAtrium({ initialRunId }: { initialRunId?: string } = {}) {
         const response = await createRun({
           assignment_text: assignmentText,
           teaching_intent: teachingIntent,
-          title: mockAssignment.title,
+          title: assignmentTitle,
         });
         if (response.state?.assignment) setAssignmentTitle(response.state.assignment.title);
         const source = createSseSource(response.run_id, sink, {
@@ -221,6 +221,7 @@ export function useAtrium({ initialRunId }: { initialRunId?: string } = {}) {
     startMockPhaseOne(MOCK_RUN_ID);
   }, [
     assignmentText,
+    assignmentTitle,
     engine,
     sink,
     startMockPhaseOne,
