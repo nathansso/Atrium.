@@ -43,7 +43,10 @@ export async function createRun(body: CreateRunRequest): Promise<CreateRunRespon
 }
 
 export async function getRun(runId: string): Promise<RunState> {
-  return request<RunState>(`/api/runs/${encodeURIComponent(runId)}`);
+  const response = await request<{ run_id: string; state: RunState }>(
+    `/api/runs/${encodeURIComponent(runId)}`,
+  );
+  return response.state;
 }
 
 export type GraphResponse = GraphNeighborhood & {
