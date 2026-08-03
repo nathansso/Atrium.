@@ -61,7 +61,9 @@ function getState(): GuildState {
 }
 
 function gateTypeForAgent(agent: AgentName): ApprovalGateType {
-  return agent === "lesson_planner" ? "final_plan" : "low_confidence_grade";
+  if (agent === "lesson_planner") return "final_plan";
+  if (agent === "curriculum_research_agent") return "curriculum_draft";
+  return "low_confidence_grade";
 }
 
 export function createMockGuildAdapter(): GuildAgentAdapter {
@@ -117,11 +119,14 @@ export function createMockGuildAdapter(): GuildAgentAdapter {
         details: { confidence: record.confidence },
       });
       if (record.human_review_required) {
+        const curriculumReview = record.agent === "curriculum_research_agent";
         await adapter.requestApproval({
           run_id: record.run_id,
           gate_type: gateTypeForAgent(record.agent),
-          subject_id: record.agent,
-          reason: `Agent ${record.agent} finished with confidence ${record.confidence.toFixed(2)} and requires professor review.`,
+          subject_id: curriculumReview ? record.run_id : record.agent,
+          reason: curriculumReview
+            ? `Curriculum draft ${record.run_id} requires educator review before it can become student-facing.`
+            : `Agent ${record.agent} finished with confidence ${record.confidence.toFixed(2)} and requires professor review.`,
           evidence_refs: record.evidence_refs,
         });
       }

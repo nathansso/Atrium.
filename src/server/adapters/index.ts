@@ -71,8 +71,8 @@ const liveCapable: ReadonlySet<AdapterName> = new Set<AdapterName>([
   "falkordb",
   "laser",
   "rocketride",
-  "firecrawl",
   "guild",
+  "firecrawl",
 ]);
 
 /**
@@ -106,8 +106,8 @@ export async function resetAdapters(): Promise<void> {
   resetMockLaser();
   resetMockRocketRide();
   resetMockGuild();
-  resetMockFirecrawl();
   resetLiveGuild();
+  resetMockFirecrawl();
   await Promise.all([
     closeLiveFalkor(),
     closeLiveLaser(),

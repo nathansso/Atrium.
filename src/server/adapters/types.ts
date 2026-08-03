@@ -245,7 +245,10 @@ export type AgentHandoff = {
   at: string;
 };
 
-export type ApprovalGateType = "low_confidence_grade" | "final_plan";
+export type ApprovalGateType =
+  | "low_confidence_grade"
+  | "final_plan"
+  | "curriculum_draft";
 
 export type ApprovalGate = {
   gate_id: string;

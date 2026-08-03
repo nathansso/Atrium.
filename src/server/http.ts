@@ -42,6 +42,9 @@ export function toApiError(error: unknown): NextResponse<ApiErrorBody> {
   if (error instanceof Error && error.name === "CurriculumNotFoundError") {
     return apiError("draft_not_found", error.message, 404);
   }
+  if (error instanceof Error && error.name === "CurriculumDecisionConflictError") {
+    return apiError("decision_conflict", error.message, 409);
+  }
   if (error instanceof Error && error.name === "CurriculumResearchError") {
     return apiError("research_failed", error.message, 422);
   }
