@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 870" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3A4656"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="880" height="870" rx="10" fill="#ffffff"/>
+
+  <!-- ============ connectors ============ -->
+  <g fill="none" stroke="#3A4656" stroke-width="2">
+    <path d="M440,140 L440,185" marker-end="url(#arrow)"/>
+    <path d="M440,295 L440,340" marker-end="url(#arrow)"/>
+    <!-- branch out of RocketRide -->
+    <path d="M440,470 L440,510"/>
+    <path d="M230,510 L650,510"/>
+    <path d="M230,510 L230,560" marker-end="url(#arrow)"/>
+    <path d="M650,510 L650,560" marker-end="url(#arrow)"/>
+    <!-- merge into User / UI -->
+    <path d="M230,670 L230,700"/>
+    <path d="M650,670 L650,700"/>
+    <path d="M230,700 L650,700"/>
+    <path d="M440,700 L440,730" marker-end="url(#arrow)"/>
+  </g>
+
+  <!-- ============ LaserData ============ -->
+  <rect x="190" y="30" width="500" height="110" rx="12" fill="#EAF6EE" stroke="#46A96E" stroke-width="1.6"/>
+  <g transform="translate(240,85)" fill="none" stroke="#2E9C5E" stroke-width="2.2" stroke-linecap="round">
+    <ellipse cx="0" cy="-9" rx="14" ry="5"/>
+    <path d="M-14,-9 V8 a14,5 0 0 0 28,0 V-9"/>
+    <path d="M-14,-0.5 a14,5 0 0 0 28,0"/>
+    <path d="M11,-19 a9,9 0 0 1 9,9"/>
+    <path d="M11,-25 a15,15 0 0 1 15,15"/>
+  </g>
+  <text x="295" y="78" font-size="21" font-weight="700" fill="#12233A">LaserData</text>
+  <text x="295" y="104" font-size="14" fill="#5B6675">Live signals — events, sensors, feeds</text>
+
+  <!-- ============ FalkorDB ============ -->
+  <rect x="190" y="185" width="500" height="110" rx="12" fill="#E9F1FE" stroke="#3B82F6" stroke-width="1.6"/>
+  <g transform="translate(240,240)">
+    <g stroke="#2F6BE0" stroke-width="2.2">
+      <line x1="-11" y1="9" x2="7" y2="-9"/>
+      <line x1="7" y1="-9" x2="11" y2="11"/>
+      <line x1="-11" y1="9" x2="11" y2="11"/>
+    </g>
+    <circle cx="-11" cy="9" r="4.6" fill="#ffffff" stroke="#2F6BE0" stroke-width="2.2"/>
+    <circle cx="7" cy="-9" r="4.6" fill="#ffffff" stroke="#2F6BE0" stroke-width="2.2"/>
+    <circle cx="11" cy="11" r="4.6" fill="#ffffff" stroke="#2F6BE0" stroke-width="2.2"/>
+  </g>
+  <text x="295" y="233" font-size="21" font-weight="700" fill="#12233A">FalkorDB</text>
+  <text x="295" y="259" font-size="14" fill="#5B6675">Persistent graph memory — entities, relationships, history</text>
+
+  <!-- ============ RocketRide.ai ============ -->
+  <rect x="190" y="340" width="500" height="130" rx="12" fill="#EEEBFB" stroke="#7C5CF0" stroke-width="1.6"/>
+  <g transform="translate(240,405)" fill="none" stroke="#6A47E0" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M0,-20 C9,-12 9,3 4,11 H-4 C-9,3 -9,-12 0,-20 Z"/>
+    <circle cx="0" cy="-6" r="3.2" fill="#6A47E0" stroke="none"/>
+    <path d="M-4,7 L-12,13 L-6,11"/>
+    <path d="M4,7 L12,13 L6,11"/>
+    <path d="M-2,13 L0,21 L2,13"/>
+  </g>
+  <text x="295" y="386" font-size="21" font-weight="700" fill="#12233A">RocketRide.ai</text>
+  <text x="295" y="412" font-size="14" fill="#5B6675">Orchestration engine — reasoning + tool calls,</text>
+  <text x="295" y="432" font-size="14" fill="#5B6675">decides the next action</text>
+
+  <!-- ============ Guild.ai ============ -->
+  <rect x="65" y="560" width="330" height="110" rx="12" fill="#FEF6E4" stroke="#E3A008" stroke-width="1.6"/>
+  <g transform="translate(110,615)" fill="none" stroke="#C98A00" stroke-width="2.2">
+    <circle cx="-8" cy="-6" r="4.2"/>
+    <path d="M-15.5,10 a7.5,7.5 0 0 1 15,0"/>
+    <circle cx="8" cy="-6" r="4.2"/>
+    <path d="M0.5,10 a7.5,7.5 0 0 1 15,0"/>
+  </g>
+  <text x="155" y="608" font-size="20" font-weight="700" fill="#12233A">Guild.ai</text>
+  <text x="155" y="633" font-size="14" fill="#5B6675">Multi-agent coordination</text>
+
+  <!-- ============ External Tools / APIs ============ -->
+  <rect x="485" y="560" width="330" height="110" rx="12" fill="#FDEEE7" stroke="#E8663D" stroke-width="1.6"/>
+  <g transform="translate(530,615)" fill="none" stroke="#D9542B" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M11,-13 a7,7 0 0 0 -9.2,9.2 l-11.6,11.6 a3,3 0 0 0 4.2,4.2 L10,0 a7,7 0 0 0 9.2,-9.2 l-5.3,5.3 -4.2,-1.1 -1.1,-4.2 z"/>
+  </g>
+  <text x="575" y="600" font-size="20" font-weight="700" fill="#12233A">External Tools / APIs</text>
+  <text x="575" y="624" font-size="14" fill="#5B6675">APIs, integrations,</text>
+  <text x="575" y="644" font-size="14" fill="#5B6675">actions (the “motion”)</text>
+
+  <!-- ============ User / UI ============ -->
+  <rect x="190" y="730" width="500" height="110" rx="12" fill="#ECF6EF" stroke="#5FA777" stroke-width="1.6"/>
+  <g transform="translate(240,785)" fill="none" stroke="#3F8F5E" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round">
+    <rect x="-15" y="-13" width="30" height="21" rx="2.5"/>
+    <line x1="-6" y1="8" x2="-7" y2="14"/>
+    <line x1="6" y1="8" x2="7" y2="14"/>
+    <line x1="-11" y1="14" x2="11" y2="14"/>
+  </g>
+  <text x="295" y="770" font-size="21" font-weight="700" fill="#12233A">User / UI</text>
+  <text x="295" y="795" font-size="14" fill="#5B6675">Dashboard, chat, app</text>
+  <text x="295" y="815" font-size="14" fill="#5B6675">Your product surface</text>
+</svg>

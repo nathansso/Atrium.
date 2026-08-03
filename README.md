@@ -87,13 +87,10 @@ flowchart LR
   E --> F[Students submit work]
   F --> G[LaserData streams submissions in live]
   G --> H[Assessment agent scores and classifies misconceptions]
-  H --> I{Confident?}
-  I -->|No| J[Guild.ai pauses for human review]
-  I -->|Yes| K[Mastery updated in FalkorDB]
-  J --> K
-  K --> L[Rooms dissolve and re-form]
-  L --> M[Next-day lesson plan]
-  M --> A
+  H --> K[Mastery updated in FalkorDB · rooms re-form]
+  K --> L[RocketRide drafts next-day lesson plan]
+  L --> N{Educator approves<br/>plan and any held grades}
+  N -->|Yes| A
 ```
 
 The demo uses a synthetic Algebra I class across four concepts: integer operations, the distributive property, equation sequencing, and combining like terms.
@@ -108,34 +105,30 @@ The enforced target architecture is documented in [docs/ARCHITECTURE.md](docs/AR
 
 ### System Overview
 
+![Atrium architecture — LaserData to FalkorDB to RocketRide.ai, branching to Guild.ai and external tools, then the user surface](public/assets/architecture.svg)
+
+The stack is a single top-to-bottom pipeline, not a parallel fan-out. Live signals land first and become durable graph memory; only then does the orchestration engine reason over that memory and decide the next action, coordinating agents and calling external tools before anything reaches the product surface.
+
+<details>
+<summary>Diagram source (Mermaid)</summary>
+
 ```mermaid
 flowchart TD
-  subgraph Client
-    UI["Isometric World<br/>custom canvas renderer"]
-    PANELS["React Panels<br/>rooms · students · graph · plan"]
-  end
+  LASER["LaserData<br/>Live signals — events, sensors, feeds"]
+  FALKOR["FalkorDB<br/>Persistent graph memory — entities, relationships, history"]
+  ROCKET["RocketRide.ai<br/>Orchestration engine — reasoning + tool calls, decides next action"]
+  GUILD["Guild.ai<br/>Multi-agent coordination"]
+  TOOLS["External Tools / APIs<br/>Integrations, actions (the motion)"]
+  UI["User / UI<br/>Dashboard, chat, app — your product surface"]
 
-  subgraph Server["Next.js App Router"]
-    API["API Routes"]
-    GUILDCP["Guild.ai Control Plane<br/>8 agents · approvals · traces"]
-    ROCKETCP["RocketRide Data Plane<br/>pipelines · reads · writes"]
-  end
-
-  subgraph Data
-    FALKOR["FalkorDB<br/>MEMORY"]
-    LASER["LaserData<br/>LIVE"]
-  end
-
-  UI --> API
-  PANELS --> API
-  API --> GUILDCP
-  GUILDCP --> ROCKETCP
-  ROCKETCP --> FALKOR
-  ROCKETCP --> LASER
-  LASER --> SSE["SSE /api/runs/:id/events"]
-  SSE --> UI
-  SSE --> PANELS
+  LASER --> FALKOR
+  FALKOR --> ROCKET
+  ROCKET --> GUILD
+  ROCKET --> TOOLS
+  GUILD --> UI
+  TOOLS --> UI
 ```
+</details>
 
 ### The Four Layers
 
@@ -226,13 +219,13 @@ One full run, end to end:
 13. Students submit                     → Laser ingestActivity()
 14. submissions.received
 15. Assessment agent grades             confidence scored per item
-16. approval.requested                  → Guild gate, run PAUSES
-        ↓ human clicks approve
-17. assessment.completed
-18. FalkorDB upsertMastery()            new edges written; memory compounds
-19. student.models.updated              → students move between rooms
-20. RocketRide lesson_plan_synthesis
-21. lesson.plan.ready                   → tomorrow's school appears
+16. assessment.completed                low-confidence grades held for review
+17. FalkorDB upsertMastery()            new edges written; memory compounds
+18. student.models.updated              → students move between rooms
+19. RocketRide lesson_plan_synthesis
+20. lesson.plan.ready                   → tomorrow's school appears
+21. approval.requested                  → Guild gate, run PAUSES
+        ↓ educator approves plan + held grades via /approve-plan
 ```
 
 Every one of the 11 event types is defined and Zod-validated in `src/contracts/events.ts`.
@@ -261,6 +254,8 @@ SPONSOR_MODE=mock                    → mock         (default; fully offline)
 SPONSOR_MODE=live + keys present     → live
 SPONSOR_MODE=live + keys missing     → mock + one-time warning
 ```
+
+Guild is the one exception: it has no live adapter yet, so it always resolves to mock — even in live mode with keys present — until its SDK lands.
 
 A missing key degrades one layer. It never takes down the run. This is a demo-day property: venue wifi failing should cost a sponsor integration, not the presentation.
 
@@ -315,7 +310,7 @@ Mastery updates use Bayesian Knowledge Tracing (`src/server/mastery/`) rather th
 | RocketRide | `rocketride@1.3.0` | Hosted API (key required) | Motion layer |
 | Guild.ai | `@guildai/agents-sdk` | Hosted (CLI auth) | Agent layer |
 
-> `@guildai/agents-sdk` is not on public npm. `guild auth login` configures a private registry — this is expected, not an error.
+> **Guild.ai currently runs in mock only.** `@guildai/agents-sdk` is not on public npm — a `guild auth login` private-registry install is planned — so there is no live Guild adapter yet, and even `SPONSOR_MODE=live` falls back to the Guild mock with a one-time warning. FalkorDB, LaserData, and RocketRide each ship a live adapter.
 
 ---
 
@@ -340,8 +335,14 @@ src/
 │   ├── config/             env + per-adapter mode resolution
 │   ├── events/             event bus and SSE plumbing
 │   ├── mastery/            Bayesian Knowledge Tracing
-│   └── submissions/        submission preparation
-└── world/                  isometric renderer — iso, layout, render, sim
+│   ├── motion/             RocketRide pipeline execution
+│   ├── submissions/        submission preparation
+│   ├── coreLoop.ts         run orchestration — the whole loop, end to end
+│   ├── agentRuntime.ts     agent execution runtime
+│   ├── eventBridge.ts      event bus ↔ adapter wiring
+│   ├── sponsorBridge.ts    sponsor adapter wiring
+│   └── runStore.ts         run state store
+└── world/                  isometric renderer — iso, layout, graph, render, sim
 docs/
 ├── CONTRACTS.md            frozen shared contracts
 ├── INTEGRATION_PROTOCOL.md cross-lane integration rules
@@ -439,6 +440,7 @@ Variable names match each vendor SDK's own convention, so the SDKs can read `pro
 | `POST` | `/api/runs` | Start a workflow run |
 | `GET` | `/api/runs/:runId` | Run status |
 | `GET` | `/api/runs/:runId/events` | Live event stream (SSE) |
+| `GET` | `/api/runs/:runId/graph` | Knowledge-graph slice for the run (nodes + edges) |
 | `POST` | `/api/runs/:runId/simulate-submissions` | Feed submissions into the live stream |
 | `POST` | `/api/runs/:runId/approve-plan` | Resolve a human approval gate |
 | `GET` | `/api/students/:studentId` | Student profile and trajectory |

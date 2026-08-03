@@ -44,7 +44,7 @@ import {
   registerAgents,
   runPipeline,
 } from "./sponsorBridge";
-import { rocketRidePipelinePort, writeRoomFormation } from "./platform/rocketRideDataPlane";
+import { rocketRidePipelinePort, syncClassroomMemory, writeRoomFormation } from "./platform/rocketRideDataPlane";
 
 /**
  * The deterministic upload-to-variants loop.
@@ -238,7 +238,27 @@ async function beginCoreRun(input: {
   await recordAgentRun(runId, "student_memory_agent", memory);
   await drainEventsToStream(updateRun(runId, (state) => state));
 
-  const grouping = runGrouping(ctx, memory.result.contexts, architect.result);
+  let sharedBarriers: Awaited<ReturnType<typeof syncClassroomMemory>> = [];
+  try {
+    sharedBarriers = await syncClassroomMemory({
+      runId,
+      students,
+      concepts: architect.result.concepts.map((concept) => concept.concept_id),
+      updatedAt: initialState.created_at,
+    });
+  } catch (error) {
+    console.warn(
+      "[falkordb] classroom-memory sync failed; using deterministic grouping fallback.",
+      error,
+    );
+  }
+
+  const grouping = runGrouping(
+    ctx,
+    memory.result.contexts,
+    architect.result,
+    sharedBarriers,
+  );
   updateRun(runId, (state) => ({
     ...state,
     rooms: grouping.result.rooms,

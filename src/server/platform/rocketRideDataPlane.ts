@@ -6,9 +6,10 @@
  * work when needed, persists classroom memory, and emits the event spine.
  * The provider adapters remain an internal implementation detail.
  */
-import { misconceptionConcept, type AgentEvent, type ConceptId, type Room, type RunState } from "@/contracts";
+import { misconceptionConcept, type AgentEvent, type ConceptId, type Room, type RunState, type Student } from "@/contracts";
 import { getAdapters } from "@/server/adapters";
 import type { PipelineRequest, PipelineResult } from "@/server/adapters";
+import { syncClassroomGraph } from "@/server/memory/classroomGraph";
 
 const PUBLISHED_KEY = "__atrium_rocketride_published__";
 
@@ -82,6 +83,16 @@ export async function materializeAssessmentMemory(run: RunState): Promise<void> 
 /** Save the graph state produced by a run; no route or agent writes FalkorDB directly. */
 export async function writeRoomFormation(runId: string, rooms: Room[]): Promise<number> {
   return getAdapters().falkordb.saveRoomFormation(runId, rooms);
+}
+
+/** Build and read the current graph-backed barriers through the data plane. */
+export async function syncClassroomMemory(input: {
+  runId: string;
+  students: Student[];
+  concepts: ConceptId[];
+  updatedAt: string;
+}) {
+  return syncClassroomGraph({ falkordb: getAdapters().falkordb, ...input });
 }
 
 export function resetDataPlaneProgress(runId?: string): void {
