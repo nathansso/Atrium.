@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import type {
   CurriculumChunk,
@@ -17,6 +17,36 @@ type ResearchResponse = {
 };
 
 type LaunchResponse = { run_id: string; reused: boolean };
+
+type ResearchSession = {
+  result: ResearchResponse;
+  approval: CurriculumDraft["approval_state"];
+  topic: string;
+  audience: string;
+  teachingIntent: string;
+  freshness: string;
+  maxSources: number;
+};
+
+const RESEARCH_SESSION_KEY = "atrium:active-research-draft";
+
+function readResearchSession(): ResearchSession | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(RESEARCH_SESSION_KEY);
+    if (!raw) return null;
+    const value = JSON.parse(raw) as Partial<ResearchSession>;
+    if (!value.result?.draft?.draft_id || !value.approval) return null;
+    return value as ResearchSession;
+  } catch {
+    return null;
+  }
+}
+
+function saveResearchSession(session: ResearchSession): void {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(RESEARCH_SESSION_KEY, JSON.stringify(session));
+}
 
 const WARNING_LABEL: Record<ResearchWarning["kind"], string> = {
   conflicting_evidence: "Conflicting evidence",
@@ -41,6 +71,30 @@ export function CurriculumResearchPanel() {
   const [approval, setApproval] = useState<CurriculumDraft["approval_state"] | null>(null);
 
   const draft = result?.draft ?? null;
+
+  const persist = (nextResult: ResearchResponse, nextApproval: CurriculumDraft["approval_state"]) => {
+    saveResearchSession({
+      result: nextResult,
+      approval: nextApproval,
+      topic,
+      audience,
+      teachingIntent,
+      freshness,
+      maxSources,
+    });
+  };
+
+  useEffect(() => {
+    const saved = readResearchSession();
+    if (!saved) return;
+    setResult(saved.result);
+    setApproval(saved.approval);
+    setTopic(saved.topic);
+    setAudience(saved.audience);
+    setTeachingIntent(saved.teachingIntent);
+    setFreshness(saved.freshness);
+    setMaxSources(saved.maxSources);
+  }, []);
   const sourceById = useMemo(
     () => new Map((draft?.sources ?? []).map((source) => [source.source_id, source])),
     [draft],
@@ -80,6 +134,7 @@ export function CurriculumResearchPanel() {
       const nextResult = body as ResearchResponse;
       setResult(nextResult);
       setApproval(nextResult.draft.approval_state);
+      persist(nextResult, nextResult.draft.approval_state);
     } catch (researchError) {
       setError(
         researchError instanceof Error ? researchError.message : String(researchError),
@@ -131,6 +186,7 @@ export function CurriculumResearchPanel() {
         throw new Error("Approval response did not match the reviewed draft.");
       }
       setApproval(body.draft.approval_state);
+      persist({ ...result!, draft: body.draft }, body.draft.approval_state);
     } catch (approvalError) {
       setError(
         approvalError instanceof Error ? approvalError.message : String(approvalError),
