@@ -6,7 +6,7 @@ Atrium is an agentic education platform. A professor uploads one assignment; Atr
 
 The entire loop is rendered as a living isometric school that visibly rebuilds itself after every assignment.
 
-Deployed @: atrium-web-production-164a.up.railway.app
+Deployed @ atrium-web-production-164a.up.railway.app
 
 > Built for **Memory Meets Motion** — Frontier Tower, San Francisco, August 3 2026.
 
