@@ -1,0 +1,55 @@
+{
+  "pipeline": {
+    "name": "atrium/concept-extraction",
+    "description": "Atrium motion pipeline. Extracts concepts, objectives, difficulty and constraints from an uploaded assignment. A PDF/image attachment is routed through OCR + NER; raw text passes straight to the model. Output JSON is consumed by Atrium's Assignment Architect agent (src/server/agents/assignmentArchitect.ts).",
+    "version": 1,
+    "source": "input",
+    "components": [
+      {
+        "id": "input",
+        "provider": "webhook",
+        "name": "Assignment upload",
+        "description": "Entry point. Receives the payload from client.send(token, payload, objinfo, mimeType): a PDF/image attachment or raw prompt text.",
+        "config": { "method": "POST", "accepts": ["application/pdf", "image/*", "text/plain"] }
+      },
+      {
+        "id": "ocr",
+        "provider": "ocr",
+        "name": "OCR",
+        "description": "Optical character recognition — turns a PDF/image into text. Text payloads pass through unchanged.",
+        "config": { "language": "eng" },
+        "input": [{ "lane": "documents", "from": "input" }]
+      },
+      {
+        "id": "ner",
+        "provider": "ner",
+        "name": "Named-entity recognition",
+        "description": "Tags mathematical terms and operations to ground concept extraction.",
+        "config": {},
+        "input": [{ "lane": "text", "from": "ocr" }]
+      },
+      {
+        "id": "llm",
+        "provider": "ai_chat",
+        "name": "Concept extractor",
+        "description": "Maps the assignment to concepts, objectives, difficulty and constraints.",
+        "config": {
+          "provider": "${ROCKETRIDE_LLM_PROVIDER}",
+          "model": "${ROCKETRIDE_LLM_MODEL}",
+          "temperature": 0,
+          "output_format": "json",
+          "system": "You are Atrium's Assignment Architect. Read the assignment text and named entities and return STRICT JSON ONLY (no prose, no code fences) matching: {\"concepts\":[{\"concept_id\":string,\"label\":string}],\"objectives\":[{\"objective_id\":string,\"statement\":string,\"concept_id\":string}],\"difficulty\":\"intro\"|\"core\"|\"stretch\",\"constraints\":[string]}. Use lower_snake_case concept_ids. Do not invent concepts that are not evidenced by the text."
+        },
+        "input": [{ "lane": "text", "from": "ner" }]
+      },
+      {
+        "id": "output",
+        "provider": "response",
+        "name": "Structured concepts",
+        "description": "Emits the model's JSON as the pipeline result. result_types.text is the field Atrium's live adapter parses (rocketrideLive.ts extractOutput).",
+        "config": { "result_types": { "text": "text" } },
+        "input": [{ "lane": "text", "from": "llm" }]
+      }
+    ]
+  }
+}
