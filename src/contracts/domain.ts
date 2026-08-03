@@ -33,17 +33,8 @@ export const scaffoldingLevelSchema = z.union([
 
 export type ScaffoldingLevel = z.infer<typeof scaffoldingLevelSchema>;
 
-/**
- * Written out key by key rather than as `z.record` so every concept is
- * required: the contract type is `Record<ConceptId, MasteryEstimate>`, not a
- * partial map.
- */
-export const masteryByConceptSchema = z.object({
-  integer_operations: masteryEstimateSchema,
-  distributive_property: masteryEstimateSchema,
-  equation_sequencing: masteryEstimateSchema,
-  combining_like_terms: masteryEstimateSchema,
-});
+/** Mastery keys are the concept registry of the current run. */
+export const masteryByConceptSchema = z.record(conceptIdSchema, masteryEstimateSchema);
 
 export type MasteryByConcept = z.infer<typeof masteryByConceptSchema>;
 
@@ -87,7 +78,7 @@ export const assignmentSchema = z.object({
   assignment_id: z.string().min(1),
   title: z.string().min(1),
   course: z.string().min(1),
-  source: z.enum(["demo_seed", "upload"]),
+  source: z.enum(["demo_seed", "upload", "curriculum"]),
   teaching_intent: z.string(),
   professor_constraints: z.array(z.string()),
   objectives: z.array(learningObjectiveSchema).min(1),

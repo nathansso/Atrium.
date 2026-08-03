@@ -10,6 +10,7 @@ import {
   curriculumDraftSchema,
   type CurriculumApproval,
   type CurriculumDraft,
+  type CurriculumLaunch,
 } from "@/contracts";
 
 const STORE_KEY = Symbol.for("atrium.curriculumStore");
@@ -17,6 +18,7 @@ const STORE_KEY = Symbol.for("atrium.curriculumStore");
 export type CurriculumRecord = {
   draft: CurriculumDraft;
   approval: CurriculumApproval | null;
+  launch: CurriculumLaunch | null;
 };
 
 type CurriculumStore = {
@@ -41,7 +43,7 @@ export function nextDraftId(): string {
 
 export function putDraft(draft: CurriculumDraft): CurriculumDraft {
   const validated = curriculumDraftSchema.parse(draft);
-  store().records.set(validated.draft_id, { draft: validated, approval: null });
+  store().records.set(validated.draft_id, { draft: validated, approval: null, launch: null });
   return validated;
 }
 
@@ -69,7 +71,24 @@ export function setApproval(
     ...record.draft,
     approval_state: approval.state,
   });
-  const updated: CurriculumRecord = { draft, approval };
+  const updated: CurriculumRecord = { ...record, draft, approval };
+  s.records.set(draftId, updated);
+  return updated;
+}
+
+/** Resolve an active lesson run back to its curriculum launch sequence. */
+export function findRecordByLessonRun(runId: string): CurriculumRecord | undefined {
+  return [...store().records.values()].find((record) =>
+    record.launch?.lesson_runs.some((lesson) => lesson.run_id === runId),
+  );
+}
+
+/** Persist the idempotent launch record after the core run is created. */
+export function setLaunch(draftId: string, launch: CurriculumLaunch): CurriculumRecord | undefined {
+  const s = store();
+  const record = s.records.get(draftId);
+  if (!record) return undefined;
+  const updated: CurriculumRecord = { ...record, launch };
   s.records.set(draftId, updated);
   return updated;
 }

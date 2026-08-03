@@ -12,15 +12,24 @@ export const conceptIds = [
   "combining_like_terms",
 ] as const;
 
-export const conceptIdSchema = z.enum(conceptIds);
+/**
+ * A run owns its concept registry. The four values above remain the seeded
+ * Algebra registry, while curriculum launches may introduce scoped slugs such
+ * as `machine-learning` without pretending they are Algebra skills.
+ */
+export const conceptIdSchema = z.string().min(1).regex(/^[a-z0-9]+(?:[_:-][a-z0-9]+)*$/);
 export type ConceptId = z.infer<typeof conceptIdSchema>;
 
-export const conceptLabels: Record<ConceptId, string> = {
+export const conceptLabels: Record<string, string> = {
   integer_operations: "Integer Operations",
   distributive_property: "Distributive Property",
   equation_sequencing: "Equation Sequencing",
   combining_like_terms: "Combining Like Terms",
 };
+
+export function conceptLabel(conceptId: ConceptId): string {
+  return conceptLabels[conceptId] ?? conceptId.replace(/[_:-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 /**
  * Documented accommodations. These are delivery-layer inputs only.

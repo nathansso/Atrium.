@@ -10,9 +10,11 @@ import type { RunProjection } from "@/world/runState";
 import { AgentFeed } from "@/components/panels/AgentFeed";
 import { AssignmentMorphPanel } from "@/components/panels/AssignmentMorphPanel";
 import { DetailPanel } from "@/components/panels/DetailPanel";
+import { EvidenceGraphPanel } from "./EvidenceGraphPanel";
+import type { GraphNeighborhood } from "@/server/adapters/types";
 import type { Selection } from "./useAtrium";
 
-type WorkspaceTab = "details" | "activity" | "assignment";
+type WorkspaceTab = "details" | "activity" | "assignment" | "evidence";
 
 const WORKSPACE_TABS: ReadonlyArray<{
   id: WorkspaceTab;
@@ -22,6 +24,7 @@ const WORKSPACE_TABS: ReadonlyArray<{
   { id: "details", label: "Details", icon: "details" },
   { id: "activity", label: "Activity", icon: "activity" },
   { id: "assignment", label: "Assignment", icon: "assignment" },
+  { id: "evidence", label: "Evidence", icon: "sources" },
 ];
 
 function selectionKey(selection: Selection): string {
@@ -49,6 +52,7 @@ export type WorkspacePanelProps = {
   onSelect: (selection: Selection) => void;
   onApprove: (reviewId: string) => void;
   graph?: GraphOverlay;
+  evidence: GraphNeighborhood | null;
 };
 
 export function WorkspacePanel({
@@ -57,6 +61,7 @@ export function WorkspacePanel({
   onSelect,
   onApprove,
   graph,
+  evidence,
 }: WorkspacePanelProps) {
   const currentSelectionKey = selectionKey(selection);
   const [workspaceState, setWorkspaceState] = useState<{
@@ -212,6 +217,10 @@ export function WorkspacePanel({
         hidden={activeTab !== "assignment"}
       >
         <AssignmentMorphPanel projection={projection} />
+      </div>
+
+      <div id={`${idPrefix}-evidence-panel`} className="workspace__panel" role="tabpanel" aria-labelledby={`${idPrefix}-evidence-tab`} hidden={activeTab !== "evidence"}>
+        <EvidenceGraphPanel evidence={evidence} />
       </div>
     </section>
   );

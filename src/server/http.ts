@@ -48,6 +48,9 @@ export function toApiError(error: unknown): NextResponse<ApiErrorBody> {
   if (error instanceof Error && error.name === "CurriculumResearchError") {
     return apiError("research_failed", error.message, 422);
   }
+  if (error instanceof Error && error.name === "CurriculumLaunchError") {
+    return apiError("curriculum_not_launchable", error.message, 409);
+  }
   const message =
     error instanceof Error ? error.message : "Unexpected server error.";
   return apiError("internal_error", message, 500);

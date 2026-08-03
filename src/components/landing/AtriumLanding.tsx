@@ -49,8 +49,8 @@ export function AtriumLanding() {
           <a href="#principles">Principles</a>
         </nav>
 
-        <Link className={styles.headerCta} href="/demo">
-          Open the demo
+          <Link className={styles.headerCta} href="/curriculum">
+            Research a curriculum
           <span aria-hidden="true">↗</span>
         </Link>
       </header>
@@ -71,8 +71,8 @@ export function AtriumLanding() {
               the work, and brings the professor in for the decisions that matter.
             </p>
             <div className={styles.heroActions}>
-              <Link className={styles.primaryCta} href="/demo">
-                Enter the living school
+              <Link className={styles.primaryCta} href="/curriculum">
+                Research a curriculum
                 <span aria-hidden="true">→</span>
               </Link>
               <a className={styles.secondaryCta} href="#how">
@@ -321,8 +321,8 @@ export function AtriumLanding() {
             Start with a synthetic Algebra I class, then follow every room,
             decision, and movement from upload to tomorrow&apos;s lesson plan.
           </p>
-          <Link className={styles.primaryCta} href="/demo">
-            Launch the Atrium demo <span aria-hidden="true">→</span>
+          <Link className={styles.primaryCta} href="/curriculum">
+            Build a learning run <span aria-hidden="true">→</span>
           </Link>
         </section>
       </main>

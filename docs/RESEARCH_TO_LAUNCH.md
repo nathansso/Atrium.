@@ -1,0 +1,133 @@
+# Research-to-Launch Integration Plan
+
+## Implemented v1 flow
+
+An educator can research a topic, review the cited curriculum, approve it, and
+launch that approved curriculum as a sequenced set of Atrium learning runs. The UI flow is
+`/` → `/curriculum` → `/demo?runId=…`.
+
+```mermaid
+flowchart LR
+  R["Research tab\nPOST /api/curriculum/research"] --> D["Cited curriculum draft\npersisted"]
+  D --> A["Educator approval\nPOST /api/curriculum/:draftId/approve"]
+  A --> L["Launch\nPOST /api/curriculum/:draftId/launch"]
+  L --> C["Assignment projection\nobjectives · learning chunks · checks"]
+  C --> P["Atrium core loop\nrooms · supports · variants"]
+  P --> E["Classroom loop\nsubmissions · assessment · mastery · plan"]
+  P --> G["Guild traces"]
+  P --> S["LaserData event stream"]
+```
+
+## UI-facing API contract
+
+The UI should not construct an Atrium assignment itself. After a draft is
+approved it calls this endpoint:
+
+```http
+POST /api/curriculum/:draftId/launch
+Content-Type: application/json
+
+{
+  "launched_by": "educator",
+  "teaching_intent": "Students compare supervised and unsupervised learning and explain an appropriate use case.",
+  "student_cohort_id": "default"
+}
+```
+
+Success returns `201` with:
+
+```json
+{
+  "draft_id": "cur_...",
+  "assignment_id": "asg_cur_..._lesson_01",
+  "run_id": "run_...",
+  "status": "variants_ready",
+  "launch": { "lesson_runs": [{ "position": 0, "chunk_id": "...", "run_id": "run_..." }] }
+}
+```
+
+The endpoint must reject a draft that is missing, rejected, pending review, or
+has no citable learning chunks. It must be idempotent: repeating a successful
+launch returns the existing lesson sequence and first `run_id`, not a second
+set of classroom runs.
+
+## What is implemented
+
+1. `POST /api/curriculum/:draftId/launch` enforces approval, projects each cited
+   chunk into its own `Assignment` and core-loop run, and is idempotent.
+2. Curriculum concepts are run-scoped rather than restricted to the four
+   Algebra seed concepts. New concepts begin with low-confidence baseline
+   mastery, never repurposed Algebra history.
+3. Curriculum runs use deterministic generated submissions for the rehearsal
+   phase, then complete assessment, mastery update, and the tomorrow plan.
+4. The Research UI opens lesson one directly in the Classroom UI. Completing its
+   assignment cycle unlocks **Next lesson →**, which opens the next run.
+5. FalkorDB persists `Assignment → Lesson → Source` and `Lesson → Concept`
+   edges for each run; the learning pane renders this evidence graph with live source links.
+
+## Remaining production hardening
+
+1. Replace the current in-memory curriculum store with a repository that persists the
+   draft, approval, edit revision, launch record, and `run_id`. FalkorDB can
+   hold the graph relationships; the source record needs durable document/KV
+   storage as well.
+2. Replace rehearsal submissions with authenticated student work and a
+   subject-aware assessment model. The deterministic generator is intentionally
+   only for demos, not a claim that Machine Learning answers can be graded from
+   web snippets.
+3. Replace the in-memory launch-sequence record with durable storage. FalkorDB
+   already stores the source-to-lesson evidence graph, but the draft and run
+   sequence need a durable document/KV repository to survive deployments.
+
+## Machine Learning smoke-test/demo
+
+Use this as the required end-to-end acceptance case in CI (mock providers) and
+as the live demo script (live Firecrawl, Guild, LaserData, FalkorDB):
+
+1. In **Research**, submit:
+   - Topic: `machine learning`
+   - Audience: `high school`
+   - Intent: `Distinguish supervised and unsupervised learning; evaluate one responsible classroom use case.`
+   - Sources: `5`
+2. Verify a cited draft with concepts, sequenced chunks, comprehension checks,
+   and any evidence warnings. Assert every chunk and claim has citations.
+3. Approve the draft as `educator-demo`.
+4. Launch it and assert one assignment/run is created per generated lesson.
+   Assert the first projected run concept registry contains Machine Learning
+   concepts, not Algebra seed concepts.
+5. Verify the first core-loop phase reaches `variants_ready`, including
+   grouping, accessibility layers, and per-room variants that preserve the
+   generated objectives.
+6. Simulate submissions and finish the classroom phase. Assert the run reaches
+   `planned`, produces assessments and a tomorrow plan, and emits a
+   low-confidence review when appropriate.
+7. Use **Next lesson →** after the plan is ready, and confirm the next assignment
+   has its own cited Evidence tab. Fetch `/api/runs/:runId/events?format=json`
+   and assert ordered events include
+   assignment upload, concept extraction, room proposal, assessment, mastery
+   update, and lesson-plan events. Confirm the Guild `curriculum.launched`
+   trace and the launch record preserve all source citations.
+
+### Test split
+
+- **Unit:** projection from an approved draft to ordered lesson assignments;
+  idempotent launch; next-lesson locking; rejection of unapproved/uncited drafts.
+- **Integration:** dynamic concept registry through student memory, grouping,
+  variants, assessments, and planning.
+- **E2E:** the seven-step Machine Learning flow above. CI uses deterministic
+  Firecrawl fixtures; the deploy smoke test uses the live provider with five
+  results maximum.
+
+## Ownership and merge order
+
+- **UI teammate:** Research tab, Curriculum tab, and calls to the three
+  research/approval/launch endpoints. They should render the returned launch
+  status and navigate to `/demo?runId=...` (or the final run route).
+- **Backend integration owner (me unless reassigned):** persistence, launch
+  endpoint, projection service, dynamic concept registry, and smoke tests.
+- **Provider owners:** review the FalkorDB persistence shape, Guild trace names,
+  and LaserData event schema once the launch event is added.
+
+Merge the backend contract and mock E2E coverage before connecting the UI's
+Launch button. The UI can safely ship the Research and Curriculum tabs first;
+until launch exists, it should show an approved draft as **ready to launch**.

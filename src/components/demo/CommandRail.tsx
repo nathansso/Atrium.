@@ -33,6 +33,8 @@ export function CommandRail({ controller }: { controller: AtriumController }) {
     speed,
     setSpeed,
     notice,
+    lessonProgress,
+    nextLesson,
   } = controller;
 
   const handleFile = async (file: File | undefined) => {
@@ -149,6 +151,18 @@ export function CommandRail({ controller }: { controller: AtriumController }) {
             <AtriumIcon name={canSimulate ? "classroom" : "start"} />
             {primaryLabel}
           </button>
+          {lessonProgress?.next && (
+            <button
+              type="button"
+              className="control-button"
+              onClick={nextLesson}
+              disabled={!lessonProgress.can_advance}
+              title={lessonProgress.can_advance ? `Open lesson ${lessonProgress.next.position + 1}` : "Finish this lesson's assignment first"}
+            >
+              <AtriumIcon name="sequence" />
+              Next lesson →
+            </button>
+          )}
           <div className="utility-menu">
             <button
               type="button"

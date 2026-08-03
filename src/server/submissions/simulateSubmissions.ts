@@ -10,6 +10,7 @@
  */
 import type { ReviewItem, RoomId, RunState } from "@/contracts";
 import { demoAnswerKey, demoSubmissions } from "@/seed/submissions";
+import type { SeedSubmission } from "@/seed/submissions";
 import { runAssessmentAgent } from "@/server/agents/assessment";
 import { runClassroomEvolutionAgent } from "@/server/agents/classroomEvolution";
 import { runLessonPlanner } from "@/server/agents/lessonPlanner";
@@ -30,7 +31,10 @@ export async function simulateSubmissions(runId: string): Promise<RunState> {
     run = await getOrCreateRun(runId);
   }
 
-  const submissions = [...demoSubmissions].sort((a, b) => a.student_id.localeCompare(b.student_id));
+  const { submissions, answerKey } = run.assignment.source === "curriculum"
+    ? curriculumSubmissions(run)
+    : { submissions: [...demoSubmissions], answerKey: demoAnswerKey };
+  submissions.sort((a, b) => a.student_id.localeCompare(b.student_id));
   emitRunEvent(run, "submissions.received", "assessment_agent", {
     simulated: true,
     submission_count: submissions.length,
@@ -50,7 +54,7 @@ export async function simulateSubmissions(runId: string): Promise<RunState> {
   await drainEventsToStream(run);
 
   // 1. Assessment Agent grades every submission.
-  const assessment = runAssessmentAgent(run, submissions, demoAnswerKey);
+  const assessment = runAssessmentAgent(run, submissions, answerKey);
   run.assessments = assessment.result.assessments;
   run.review_queue.push(...assessment.result.review_items);
   run.status = "assessed";
@@ -176,6 +180,30 @@ export async function simulateSubmissions(runId: string): Promise<RunState> {
   saveRun(run);
   await drainEventsToStream(run);
   return run;
+}
+
+/**
+ * A deterministic, content-neutral classroom rehearsal for newly launched
+ * curriculum. It evaluates the generated checks without pretending to know a
+ * web-researched answer key; real learner submissions will replace this seam.
+ */
+function curriculumSubmissions(run: RunState): { submissions: SeedSubmission[]; answerKey: Record<string, string> } {
+  const answerKey = Object.fromEntries(run.assignment.questions.map((question) => [question.question_id, "complete"]));
+  const submissions = run.students.map((student, studentIndex) => ({
+    submission_id: `sub_${run.run_id}_${student.student_id}`,
+    student_id: student.student_id,
+    responses: run.assignment.questions.map((question, questionIndex) => {
+      const heldForReview = student.student_id === "stu_02" && questionIndex === 0;
+      const needsPractice = (studentIndex + questionIndex) % 5 === 0;
+      return {
+        question_id: question.question_id,
+        answer: needsPractice ? "needs revision" : "complete",
+        work_shown: heldForReview ? "" : "Student response to the generated comprehension check.",
+        ...(heldForReview ? { legibility: "ambiguous" as const } : {}),
+      };
+    }),
+  }));
+  return { submissions, answerKey };
 }
 
 function countMisconceptions(run: RunState): Record<string, number> {

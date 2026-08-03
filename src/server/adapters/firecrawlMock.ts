@@ -244,10 +244,12 @@ export function createMockFirecrawlAdapter(): FirecrawlResearchAdapter {
         .trim();
       if (
         normalizedTopic !== "ai literacy" &&
-        normalizedTopic !== "artificial intelligence literacy"
+        normalizedTopic !== "artificial intelligence literacy" &&
+        normalizedTopic !== "machine learning" &&
+        normalizedTopic !== "ml"
       ) {
         throw new Error(
-          `The zero-credit mock fixture supports AI literacy only; configure Firecrawl to research "${query.topic}".`,
+          `The zero-credit mock fixture supports AI literacy and machine learning only; configure Firecrawl to research "${query.topic}".`,
         );
       }
       const { sources, claims } = boundCorpus(query.maxResults);

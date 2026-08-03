@@ -92,6 +92,24 @@ export type GraphNeighborhood = {
   edges: Array<{ from: string; to: string; kind: string; props: Record<string, unknown> }>;
 };
 
+/**
+ * A run-scoped evidence subgraph. It makes the research-to-lesson lineage
+ * queryable instead of treating citations as presentation-only metadata.
+ */
+export type CurriculumEvidence = {
+  run_id: string;
+  draft_id: string;
+  assignment_id: string;
+  topic: string;
+  sources: ResearchSource[];
+  chunks: Array<{
+    chunk_id: string;
+    title: string;
+    concept_ids: ConceptId[];
+    citations: string[];
+  }>;
+};
+
 export interface FalkorGraphAdapter {
   info(): AdapterInfo;
   /** Create indices/constraints. Idempotent; safe to call on every boot. */
@@ -114,6 +132,10 @@ export interface FalkorGraphAdapter {
   getSupports(studentId: string): Promise<SupportId[]>;
   /** Node/edge slice for the UI graph panel. */
   neighborhood(nodeId: string, depth?: number): Promise<GraphNeighborhood>;
+  /** Persist Source -> LessonChunk -> Concept evidence relationships for a launched curriculum. */
+  saveCurriculumEvidence(evidence: CurriculumEvidence): Promise<number>;
+  /** Read the citation subgraph rendered beside a launched learning run. */
+  curriculumEvidence(runId: string): Promise<GraphNeighborhood>;
   /** Escape hatch for one-off Cypher (demo queries, debugging). */
   query<T = unknown>(cypher: string, params?: Record<string, unknown>): Promise<T[]>;
 }

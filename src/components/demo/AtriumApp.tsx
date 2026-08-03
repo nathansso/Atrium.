@@ -9,8 +9,8 @@ import { Toasts, toastForEvent } from "./Toasts";
 import { useAtrium } from "./useAtrium";
 import { WorkspacePanel } from "./WorkspacePanel";
 
-export function AtriumApp() {
-  const controller = useAtrium();
+export function AtriumApp({ initialRunId }: { initialRunId?: string }) {
+  const controller = useAtrium({ initialRunId });
   const {
     engine,
     projection,
@@ -20,6 +20,7 @@ export function AtriumApp() {
     startRun,
     simulate,
     reset,
+    evidence,
     canStart,
     canSimulate,
   } = controller;
@@ -111,6 +112,7 @@ export function AtriumApp() {
             onSelect={setSelection}
             onApprove={(reviewId) => void approve(reviewId)}
             graph={engine.getState().graph}
+            evidence={evidence}
           />
         </aside>
       </main>

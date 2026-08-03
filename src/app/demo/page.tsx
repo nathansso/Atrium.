@@ -1,5 +1,10 @@
 import { AtriumApp } from "@/components/demo/AtriumApp";
 
-export default function DemoPage() {
-  return <AtriumApp />;
+export default async function DemoPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ runId?: string }>;
+}) {
+  const { runId } = await searchParams;
+  return <AtriumApp initialRunId={runId} />;
 }

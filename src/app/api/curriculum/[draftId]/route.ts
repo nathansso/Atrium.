@@ -1,5 +1,5 @@
 /** GET /api/curriculum/:draftId — fetch a stored curriculum draft. */
-import { getDraft } from "@/server/curriculum";
+import { getRecord } from "@/server/curriculum";
 import { apiError, apiOk } from "@/server/http";
 
 export const dynamic = "force-dynamic";
@@ -9,9 +9,9 @@ export async function GET(
   { params }: { params: Promise<{ draftId: string }> },
 ) {
   const { draftId } = await params;
-  const draft = getDraft(draftId);
-  if (!draft) {
+  const record = getRecord(draftId);
+  if (!record) {
     return apiError("draft_not_found", `No curriculum draft with id "${draftId}".`, 404);
   }
-  return apiOk({ draft });
+  return apiOk({ draft: record.draft, approval: record.approval, launch: record.launch });
 }

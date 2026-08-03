@@ -57,6 +57,24 @@ export async function getGraph(runId: string, nodeId?: string): Promise<GraphRes
   return request<GraphResponse>(`/api/runs/${encodeURIComponent(runId)}/graph${query}`);
 }
 
+export type EvidenceGraphResponse = GraphNeighborhood & { run_id: string; provider: string };
+
+export async function getCurriculumEvidence(runId: string): Promise<EvidenceGraphResponse> {
+  return request<EvidenceGraphResponse>(`/api/runs/${encodeURIComponent(runId)}/evidence`);
+}
+
+export type LessonProgress = {
+  run_id: string;
+  current: { chunk_id: string; title: string; position: number; assignment_id: string; run_id: string };
+  next: { chunk_id: string; title: string; position: number; assignment_id: string; run_id: string } | null;
+  total_lessons: number;
+  can_advance: boolean;
+};
+
+export async function getLessonProgress(runId: string): Promise<LessonProgress> {
+  return request<LessonProgress>(`/api/runs/${encodeURIComponent(runId)}/next-lesson`);
+}
+
 export async function simulateSubmissions(runId: string): Promise<void> {
   await request<unknown>(
     `/api/runs/${encodeURIComponent(runId)}/simulate-submissions`,

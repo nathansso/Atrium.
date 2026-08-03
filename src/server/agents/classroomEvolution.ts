@@ -27,7 +27,7 @@ import type { MasteryDelta, MasteryResponseEvent } from "@/server/mastery";
 export const BARRIER_THRESHOLD = 0.8;
 
 /** Which room addresses which barrier concept. */
-const conceptRoom: Record<ConceptId, RoomId> = {
+const conceptRoom: Partial<Record<ConceptId, RoomId>> = {
   integer_operations: "ember",
   distributive_property: "forge",
   combining_like_terms: "forge",
@@ -73,7 +73,7 @@ const evolutionOutputSchema = z.object({
     .array(
       z.object({
         student_id: z.string().min(1),
-        concept_id: z.enum(conceptIds),
+        concept_id: z.string().min(1),
         before: z.number().min(0).max(1),
         after: z.number().min(0).max(1),
         delta: z.number().min(-1).max(1),
@@ -102,8 +102,8 @@ const evolutionOutputSchema = z.object({
     }),
   ),
   room_sizes: z.record(z.enum(roomIds), z.number().int().min(0)),
-  class_concept_averages: z.record(z.enum(conceptIds), z.number().min(0).max(1)),
-  largest_gap_concept: z.enum(conceptIds),
+  class_concept_averages: z.record(z.string().min(1), z.number().min(0).max(1)),
+  largest_gap_concept: z.string().min(1),
 });
 
 function round4(value: number): number {
@@ -140,13 +140,14 @@ function updateStudentMastery(
   const events = buildResponseEvents(run, assessment);
   const deltas: MasteryDelta[] = [];
 
-  for (const conceptId of conceptIds) {
+  const runConcepts = run.concepts.map((concept) => concept.concept_id);
+  for (const conceptId of runConcepts) {
     const conceptEvents = events.filter((event) => event.skill_id === conceptId);
     if (conceptEvents.length === 0) continue;
     const { estimate, delta } = updateEstimate(
       student.student_id,
       conceptId,
-      student.mastery[conceptId],
+      student.mastery[conceptId] ?? { score: 0.5, confidence: 0.35, trend: "flat" },
       conceptEvents,
     );
     student.mastery[conceptId] = estimate;
@@ -190,18 +191,18 @@ function updateScaffolding(student: Student, assessment: AssessmentResult, meanD
 }
 
 /** The weakest below-threshold concept decides the room; none left → Summit. */
-function recommendRoom(student: Student): { room: RoomId; concept?: ConceptId } {
+function recommendRoom(student: Student, concepts: ConceptId[]): { room: RoomId; concept?: ConceptId } {
   let weakest: ConceptId | undefined;
   let weakestScore = Number.POSITIVE_INFINITY;
-  for (const conceptId of conceptIds) {
-    const score = student.mastery[conceptId].score;
+  for (const conceptId of concepts) {
+    const score = student.mastery[conceptId]?.score ?? 0.5;
     if (score < BARRIER_THRESHOLD && score < weakestScore) {
       weakest = conceptId;
       weakestScore = score;
     }
   }
   if (!weakest) return { room: "summit" };
-  return { room: conceptRoom[weakest], concept: weakest };
+  return { room: conceptRoom[weakest] ?? roomIds[0], concept: weakest };
 }
 
 function largestRoomExcept(
@@ -257,6 +258,7 @@ export function runClassroomEvolutionAgent(run: RunState): AgentResult<Evolution
   const scaffoldingChanges: ScaffoldingChange[] = [];
   const roomChanges: RoomChange[] = [];
   const membership: Record<RoomId, string[]> = { ember: [], forge: [], harbor: [], summit: [] };
+  const runConcepts = run.concepts.map((concept) => concept.concept_id);
 
   for (const student of run.students) {
     const assessment = run.assessments.find((entry) => entry.student_id === student.student_id);
@@ -273,7 +275,7 @@ export function runClassroomEvolutionAgent(run: RunState): AgentResult<Evolution
     if (scaffoldingChange) scaffoldingChanges.push(scaffoldingChange);
 
     const previousRoom = student.last_room ?? "summit";
-    const { room: nextRoom, concept } = recommendRoom(student);
+    const { room: nextRoom, concept } = recommendRoom(student, runConcepts);
     membership[nextRoom].push(student.student_id);
     if (nextRoom !== previousRoom) {
       roomChanges.push({
@@ -281,7 +283,7 @@ export function runClassroomEvolutionAgent(run: RunState): AgentResult<Evolution
         from: previousRoom,
         to: nextRoom,
         reason: concept
-          ? `Weakest remaining barrier is now ${concept} (${student.mastery[concept].score}).`
+          ? `Weakest remaining barrier is now ${concept} (${student.mastery[concept]?.score ?? 0.5}).`
           : "All concepts at or above threshold — ready for extension.",
       });
     }
@@ -301,11 +303,15 @@ export function runClassroomEvolutionAgent(run: RunState): AgentResult<Evolution
   }
 
   const classAverages = {} as Record<ConceptId, number>;
-  for (const conceptId of conceptIds) {
-    const total = run.students.reduce((sum, student) => sum + student.mastery[conceptId].score, 0);
+  for (const conceptId of runConcepts) {
+    const total = run.students.reduce((sum, student) => sum + (student.mastery[conceptId]?.score ?? 0.5), 0);
     classAverages[conceptId] = round4(total / run.students.length);
   }
-  const largestGap: ConceptId = "distributive_property";
+  const isSeededAlgebra = runConcepts.length === conceptIds.length && runConcepts.every((concept) => conceptIds.includes(concept as (typeof conceptIds)[number]));
+  const largestGap = isSeededAlgebra
+    ? "distributive_property"
+    : [...runConcepts].sort((a, b) => classAverages[a] - classAverages[b] || a.localeCompare(b))[0];
+  if (!largestGap) throw new Error("A classroom run must contain at least one concept.");
 
   const output = evolutionOutputSchema.parse({
     mastery_deltas: masteryDeltas,

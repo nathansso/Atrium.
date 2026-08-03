@@ -26,6 +26,7 @@ import type { ConceptId, MasteryEstimate, MisconceptionId, Room, SupportId } fro
 import { getEnvConfig } from "@/server/config";
 import type {
   AdapterInfo,
+  CurriculumEvidence,
   FalkorGraphAdapter,
   GraphNeighborhood,
   MasteryRecord,
@@ -128,7 +129,7 @@ export function createLiveFalkorAdapter(): FalkorGraphAdapter {
      * "already indexed" failure is treated as success.
      */
     async ensureSchema(): Promise<void> {
-      const labels = ["Student", "Concept", "Misconception", "Room", "Support"];
+      const labels = ["Student", "Concept", "Misconception", "Room", "Support", "Assignment", "Lesson", "Source"];
       for (const label of labels) {
         try {
           await run(`CREATE INDEX FOR (n:${label}) ON (n.id)`);
@@ -363,6 +364,133 @@ export function createLiveFalkorAdapter(): FalkorGraphAdapter {
       }
 
       return { nodes: [...nodes.values()], edges };
+    },
+
+    /**
+     * Materialise the evidence lineage once a reviewed curriculum becomes a
+     * classroom run.  These are first-class FalkorDB relationships, so the UI
+     * can query provenance without reconstructing it from serialized JSON.
+     */
+    async saveCurriculumEvidence(evidence: CurriculumEvidence): Promise<number> {
+      const assignmentId = `assignment:${evidence.run_id}:${evidence.assignment_id}`;
+      await run(
+        `MERGE (a:Assignment {id: $assignmentId})
+         SET a.run_id = $runId, a.draft_id = $draftId, a.topic = $topic`,
+        { assignmentId, runId: evidence.run_id, draftId: evidence.draft_id, topic: evidence.topic },
+      );
+      if (evidence.sources.length > 0) {
+        await run(
+          `UNWIND $sources AS source
+           MERGE (s:Source {id: source.id})
+           SET s.source_id = source.source_id, s.title = source.title,
+               s.url = source.url, s.publisher = source.publisher,
+               s.provenance = source.provenance, s.retrieved_at = source.retrieved_at`,
+          {
+            sources: evidence.sources.map((source) => ({
+              id: `source:${evidence.run_id}:${source.source_id}`,
+              source_id: source.source_id,
+              title: source.title,
+              url: source.url,
+              publisher: source.publisher,
+              provenance: source.provenance,
+              retrieved_at: source.retrieved_at,
+            })),
+          },
+        );
+      }
+      if (evidence.chunks.length === 0) return 0;
+      await run(
+        `UNWIND $chunks AS chunk
+         MATCH (a:Assignment {id: $assignmentId})
+         MERGE (l:Lesson {id: chunk.id})
+         SET l.run_id = $runId, l.chunk_id = chunk.chunk_id, l.title = chunk.title
+         MERGE (a)-[:CONTAINS]->(l)
+         WITH l, chunk
+         UNWIND chunk.concept_ids AS conceptId
+         MERGE (c:Concept {id: conceptId})
+         MERGE (l)-[:TEACHES]->(c)`,
+        {
+          assignmentId,
+          runId: evidence.run_id,
+          chunks: evidence.chunks.map((chunk) => ({
+            id: `lesson:${evidence.run_id}:${chunk.chunk_id}`,
+            chunk_id: chunk.chunk_id,
+            title: chunk.title,
+            concept_ids: chunk.concept_ids,
+          })),
+        },
+      );
+      await run(
+        `UNWIND $citations AS citation
+         MATCH (l:Lesson {id: citation.lesson_id})
+         MATCH (s:Source {id: citation.source_id})
+         MERGE (l)-[:CITES]->(s)`,
+        {
+          citations: evidence.chunks.flatMap((chunk) =>
+            chunk.citations.map((sourceId) => ({
+              lesson_id: `lesson:${evidence.run_id}:${chunk.chunk_id}`,
+              source_id: `source:${evidence.run_id}:${sourceId}`,
+            })),
+          ),
+        },
+      );
+      return evidence.chunks.length;
+    },
+
+    async curriculumEvidence(runId: string): Promise<GraphNeighborhood> {
+      const rows = await run<{
+        assignment_id: string;
+        topic: string;
+        lesson_id: string;
+        lesson_title: string;
+        concept_id: string | null;
+        source_id: string | null;
+        source_title: string | null;
+        source_url: string | null;
+        source_publisher: string | null;
+        source_provenance: string | null;
+        source_retrieved_at: string | null;
+      }>(
+        `MATCH (a:Assignment {run_id: $runId})-[:CONTAINS]->(l:Lesson)
+         OPTIONAL MATCH (l)-[:TEACHES]->(c:Concept)
+         OPTIONAL MATCH (l)-[:CITES]->(s:Source)
+         RETURN a.id AS assignment_id, a.topic AS topic, l.id AS lesson_id,
+                l.title AS lesson_title, c.id AS concept_id, s.id AS source_id,
+                s.title AS source_title, s.url AS source_url,
+                s.publisher AS source_publisher, s.provenance AS source_provenance,
+                s.retrieved_at AS source_retrieved_at
+         ORDER BY lesson_id, concept_id, source_id`,
+        { runId },
+      );
+      const nodes = new Map<string, GraphNeighborhood["nodes"][number]>();
+      const edges = new Map<string, GraphNeighborhood["edges"][number]>();
+      const addNode = (id: string, label: string, kind: string, props: Record<string, unknown> = {}) => {
+        if (!nodes.has(id)) nodes.set(id, { id, label, kind, props });
+      };
+      const addEdge = (from: string, to: string, kind: string) => {
+        const key = `${from}:${kind}:${to}`;
+        if (!edges.has(key)) edges.set(key, { from, to, kind, props: {} });
+      };
+      for (const row of rows) {
+        addNode(row.assignment_id, `${row.topic} learning plan`, "Assignment", { run_id: runId });
+        addNode(row.lesson_id, row.lesson_title, "Lesson");
+        addEdge(row.assignment_id, row.lesson_id, "CONTAINS");
+        if (row.concept_id) {
+          const conceptId = `concept:${runId}:${row.concept_id}`;
+          addNode(conceptId, row.concept_id.replace(/[:_-]/g, " "), "Concept", { concept_id: row.concept_id });
+          addEdge(row.lesson_id, conceptId, "TEACHES");
+        }
+        if (row.source_id && row.source_title) {
+          addNode(row.source_id, row.source_title, "Source", {
+            url: row.source_url,
+            publisher: row.source_publisher,
+            provenance: row.source_provenance,
+            retrieved_at: row.source_retrieved_at,
+          });
+          addEdge(row.lesson_id, row.source_id, "CITES");
+        }
+      }
+      return { nodes: [...nodes.values()], edges: [...edges.values()] };
     },
 
     /** Escape hatch for demo queries and debugging — real Cypher, real engine. */

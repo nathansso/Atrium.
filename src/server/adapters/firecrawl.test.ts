@@ -48,13 +48,13 @@ describe("firecrawl mock adapter", () => {
     }
   });
 
-  it("does not relabel the AI-literacy fixture as another topic", async () => {
+  it("does not relabel the AI-literacy and Machine Learning fixture as another topic", async () => {
     await expect(
       createMockFirecrawlAdapter().research({
         ...query,
         topic: "photosynthesis",
       }),
-    ).rejects.toThrow("supports AI literacy only");
+    ).rejects.toThrow("supports AI literacy and machine learning only");
   });
 });
 
