@@ -8,13 +8,17 @@ records, assignment contents, credentials, or sponsor payloads.
 
 - `package.json` and `package-lock.json` for vulnerable open-source dependencies
   and license issues.
-- TypeScript and JavaScript source with Snyk Code static analysis.
+- TypeScript and JavaScript source with Snyk Code static analysis when Snyk Code
+  is enabled for the organization.
 - Every push and pull request through `.github/workflows/snyk.yml`.
 - The `main` dependency snapshot through `snyk monitor`, so newly disclosed
   vulnerabilities appear in the Snyk dashboard without a code change.
 
-High-severity findings fail the security workflow. SARIF output is uploaded to
-GitHub Code Scanning so findings are visible beside the affected code.
+High-severity dependency findings with a Snyk-computed upgrade fail the security
+workflow. Findings without a currently supported upgrade remain visible in
+SARIF and the monitored Snyk project without breaking the application build.
+This follows Snyk's `--fail-on=upgradable` CI policy. Snyk Code is best-effort
+until that feature is enabled for the organization.
 
 ## One-time setup
 
@@ -40,7 +44,7 @@ snyk auth
 Then run:
 
 ```bash
-snyk test --all-projects --severity-threshold=high
+snyk test --all-projects --severity-threshold=high --fail-on=upgradable
 snyk code test --severity-threshold=high
 snyk monitor --all-projects --project-name=atrium
 ```

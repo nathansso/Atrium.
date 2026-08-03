@@ -320,9 +320,10 @@ Mastery updates use Bayesian Knowledge Tracing (`src/server/mastery/`) rather th
 
 > **Guild.ai's live adapter covers the two approval gates, not the full agent chain.** `@guildai/agents-sdk` is the sandboxed runtime Guild agent code runs *inside* — it isn't an npm client library, and agents can't be called from an external app by importing it. The only externally callable surface is Guild's [Trigger REST API](https://docs.guild.ai/platform/triggers): HTTP Basic Auth against a per-agent API-trigger credential. The eight specialist agents already exist in the workspace with matching prompts and handoffs; agent registry, handoffs, and traces have no external Guild endpoint (they're internal to how a session runs), so both mock and live keep that local. `requestApproval`/`resolveApproval` are genuinely live: they start a real session on `assessment-agent` or `lesson-planner` and forward the professor's decision back into it. All four runtime sponsors ship a live adapter. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the control-plane/data-plane boundary rules.
 
-Snyk checks open-source dependencies and application source on pushes and pull
-requests, uploads SARIF findings to GitHub Code Scanning, and monitors `main`
-for newly disclosed vulnerabilities. Setup and local commands are documented in
+Snyk checks open-source dependencies on pushes and pull requests, uploads SARIF
+findings to GitHub Code Scanning, and monitors `main` for newly disclosed
+vulnerabilities. Snyk Code also scans application source when that feature is
+enabled for the Snyk organization. Setup and local commands are documented in
 [docs/SECURITY.md](docs/SECURITY.md).
 
 ---
