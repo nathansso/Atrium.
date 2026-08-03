@@ -1,0 +1,39 @@
+{
+  "pipeline": {
+    "name": "atrium/variant-generation",
+    "description": "Atrium motion pipeline. Given a room's dominant barrier, its focus concepts and the base assignment, generates a room-level variant that preserves the learning objective and rigour. Output JSON is consumed by Atrium's Assignment Curator agent (src/server/agents/assignmentCurator.ts) — one execution per room.",
+    "version": 1,
+    "source": "input",
+    "components": [
+      {
+        "id": "input",
+        "provider": "webhook",
+        "name": "Room + base assignment",
+        "description": "Receives JSON: { room_barrier, focus_concepts, base_assignment } via client.send().",
+        "config": { "method": "POST", "accepts": ["application/json", "text/plain"] }
+      },
+      {
+        "id": "llm",
+        "provider": "ai_chat",
+        "name": "Variant generator",
+        "description": "Rewrites the assignment for the room's barrier without lowering the objective.",
+        "config": {
+          "provider": "${ROCKETRIDE_LLM_PROVIDER}",
+          "model": "${ROCKETRIDE_LLM_MODEL}",
+          "temperature": 0.2,
+          "output_format": "json",
+          "system": "You are Atrium's Assignment Curator. Given a room barrier, focus concepts and a base assignment, produce a room-level variant. Return STRICT JSON ONLY matching: {\"objective_preserved\":true,\"rigor_preserved\":true,\"variant\":string,\"adaptation_summary\":string,\"rationale\":string}. Change delivery, scaffolding and framing only — never lower the objective or rigour. objective_preserved and rigor_preserved MUST both be true; revise until they are."
+        },
+        "input": [{ "lane": "text", "from": "input" }]
+      },
+      {
+        "id": "output",
+        "provider": "response",
+        "name": "Room variant",
+        "description": "result_types.text is parsed by Atrium's live adapter.",
+        "config": { "result_types": { "text": "text" } },
+        "input": [{ "lane": "text", "from": "llm" }]
+      }
+    ]
+  }
+}
