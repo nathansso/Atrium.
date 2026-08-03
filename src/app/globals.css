@@ -4488,6 +4488,42 @@ button {
   color: var(--mint);
 }
 
+.research-start-learning {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-top: 24px;
+  padding: 22px;
+  border: 1px solid rgba(203, 185, 255, 0.2);
+  border-radius: 16px;
+  background: linear-gradient(120deg, rgba(203, 185, 255, 0.11), rgba(185, 239, 207, 0.08));
+}
+
+.research-start-learning[data-ready="false"] {
+  opacity: 0.56;
+  filter: grayscale(0.45);
+}
+
+.research-start-learning h2 {
+  margin: 4px 0 0;
+  font-size: 18px;
+}
+
+.research-start-learning p {
+  max-width: 60ch;
+  margin: 7px 0 0;
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.research-start-learning__button {
+  flex: 0 0 auto;
+  min-height: 48px;
+  padding-inline: 18px;
+}
+
 .research-warnings {
   display: flex;
   flex-direction: column;

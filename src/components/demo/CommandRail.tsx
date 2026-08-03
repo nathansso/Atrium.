@@ -36,6 +36,7 @@ export function CommandRail({ controller }: { controller: AtriumController }) {
     lessonProgress,
     nextLesson,
     assignmentTitle,
+    isCurriculumRun,
   } = controller;
 
   const handleFile = async (file: File | undefined) => {
@@ -47,6 +48,7 @@ export function CommandRail({ controller }: { controller: AtriumController }) {
   };
 
   const restoreSample = () => {
+    if (isCurriculumRun) return;
     setAssignmentText(String(mockAssignment.source_text ?? ""));
     setTeachingIntent(String(mockAssignment.teaching_intent ?? ""));
     setFileName(null);
@@ -86,6 +88,11 @@ export function CommandRail({ controller }: { controller: AtriumController }) {
             <AtriumIcon name="connection" size={18} />
             {transport === "live" ? "Live" : "Demo"}
           </span>
+          {!isCurriculumRun && (
+            <span className="status-pill status-pill--stage" title="Fallback sample only">
+              Sample demo
+            </span>
+          )}
           <span className={`status-pill status-pill--stage status-pill--${stage}`}>
             {stageLabel}
           </span>
@@ -252,9 +259,15 @@ export function CommandRail({ controller }: { controller: AtriumController }) {
                 <AtriumIcon name="upload" size={20} />
                 Upload file
               </button>
-              <button type="button" className="text-button" onClick={restoreSample}>
+              <button
+                type="button"
+                className="text-button"
+                onClick={restoreSample}
+                disabled={isCurriculumRun}
+                title={isCurriculumRun ? "Curriculum lessons cannot be replaced with the sample demo." : undefined}
+              >
                 <AtriumIcon name="reset" size={20} />
-                Restore sample
+                {isCurriculumRun ? "Sample locked" : "Restore sample"}
               </button>
             </div>
           </div>
