@@ -103,7 +103,7 @@ Students are grouped by their current academic barrier — **never** by diagnosi
 
 ### System Overview
 
-![Atrium architecture — LaserData to FalkorDB to RocketRide.ai, branching to Guild.ai and external tools, then the user surface](public/assets/architecture.png)
+![Atrium architecture — LaserData to FalkorDB to RocketRide.ai, branching to Guild.ai and external tools, then the user surface](public/assets/architecture.svg)
 
 The stack is a single top-to-bottom pipeline, not a parallel fan-out. Live signals land first and become durable graph memory; only then does the orchestration engine reason over that memory and decide the next action, coordinating agents and calling external tools before anything reaches the product surface.
 
