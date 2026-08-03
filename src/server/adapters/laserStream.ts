@@ -21,7 +21,13 @@ import type { Laser } from "@laserdata/laser-sdk";
 import { agentEventSchema, type AgentEvent } from "@/contracts";
 import { getEnvConfig } from "@/server/config";
 import { createEvent, type EventInput, type EventListener } from "@/server/events";
-import type { ActivityRecord, AdapterInfo, LaserStreamAdapter, StreamedEvent } from "./types";
+import type {
+  ActivityRecord,
+  AdapterInfo,
+  LaserStreamAdapter,
+  StreamedEvent,
+  StreamSubscriptionOptions,
+} from "./types";
 
 /** Iggy topic names allow alphanumerics, dashes and underscores. */
 function topicName(runId: string): string {
@@ -120,14 +126,22 @@ export function createLiveLaserAdapter(): LaserStreamAdapter {
       );
     },
 
-    subscribe(runId: string, onEvent: EventListener): () => void {
+    subscribe(
+      runId: string,
+      onEvent: EventListener,
+      options: StreamSubscriptionOptions = {},
+    ): () => void {
       const controller = new AbortController();
 
       void (async () => {
         try {
           const topic = await topicFor(runId);
-          const consumer = topic.consumer(0, { autoCommit: true });
-          for await (const message of consumer.stream({ signal: controller.signal })) {
+          const messages = options.fromOffset === undefined
+            ? topic.consumer(0, { autoCommit: true }).stream({ signal: controller.signal })
+            : (await topic.replay())
+                .fromOffsets(new Map([[0, options.fromOffset]]))
+                .stream({ signal: controller.signal });
+          for await (const message of messages) {
             const event = decodeEvent(message.payload);
             if (!event) continue;
             try {
@@ -139,6 +153,7 @@ export function createLiveLaserAdapter(): LaserStreamAdapter {
         } catch (error) {
           if (!controller.signal.aborted) {
             console.error(`[laser] subscription to ${runId} ended`, error);
+            options.onError?.(error);
           }
         }
       })();
@@ -168,10 +183,15 @@ export function createLiveLaserAdapter(): LaserStreamAdapter {
 
     async latestOffset(runId: string): Promise<bigint> {
       const topic = await topicFor(runId);
-      const stored = await topic.consumer(0, { autoCommit: false }).storedOffset(0);
-      if (stored) return stored.currentOffset;
-      const all = await adapter.replay(runId);
-      return all.at(-1)?.offset ?? 0n;
+      const cursor = await topic.replay({ batchSize: 500 });
+      let latest = -1n;
+      for (;;) {
+        const batch = await cursor.poll();
+        if (batch.length === 0) return latest;
+        for (const message of batch) {
+          if (message.offset > latest) latest = message.offset;
+        }
+      }
     },
 
     async listTopics(): Promise<string[]> {

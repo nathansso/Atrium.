@@ -6,6 +6,24 @@ import { GET, POST } from "./route";
 
 const RUN = "run_sse";
 
+const laser = vi.hoisted(() => ({
+  mode: "mock" as "mock" | "live",
+  ensureTopic: vi.fn(),
+  replay: vi.fn(),
+  subscribe: vi.fn(),
+}));
+
+vi.mock("@/server/adapters", () => ({
+  getAdapters: () => ({
+    laser: {
+      info: () => ({ name: "laser", mode: laser.mode, provider: "test" }),
+      ensureTopic: laser.ensureTopic,
+      replay: laser.replay,
+      subscribe: laser.subscribe,
+    },
+  }),
+}));
+
 function makeContext(runId: string) {
   return { params: Promise.resolve({ runId }) };
 }
@@ -42,6 +60,10 @@ describe("GET /api/runs/:runId/events", () => {
   beforeEach(() => {
     resetEventBus();
     resetAuditLog();
+    laser.mode = "mock";
+    laser.ensureTopic.mockReset().mockResolvedValue(undefined);
+    laser.replay.mockReset().mockResolvedValue([]);
+    laser.subscribe.mockReset().mockReturnValue(() => {});
   });
 
   it("replays history, then streams live events, and unsubscribes on abort", async () => {
@@ -89,6 +111,7 @@ describe("GET /api/runs/:runId/events", () => {
     const { value } = await response.body!.getReader().read();
     const text = new TextDecoder().decode(value);
 
+    expect(text).toContain("id: ");
     expect(text).toContain("event: agent-event\n");
     expect(text).toContain('"event_type":"lesson.plan.ready"');
     controller.abort();
@@ -122,6 +145,98 @@ describe("GET /api/runs/:runId/events", () => {
     const body = await response.json();
     expect(body.run_id).toBe(RUN);
     expect(body.events).toHaveLength(1);
+  });
+
+  it("reads JSON history from Laser in live mode", async () => {
+    laser.mode = "live";
+    const event = emitEvent({
+      run_id: RUN,
+      event_type: "assignment.uploaded",
+      source_agent: "assignment_architect",
+    });
+    resetEventBus();
+    laser.replay.mockResolvedValue([
+      { event, offset: 7n },
+      { event, offset: 8n },
+    ]);
+
+    const response = await GET(makeGetRequest(undefined, "?format=json"), makeContext(RUN));
+    const body = await response.json();
+
+    expect(body.events).toEqual([event]);
+    expect(laser.replay).toHaveBeenCalledWith(RUN);
+  });
+
+  it("streams Laser from offset zero without subscribing to the local bus", async () => {
+    laser.mode = "live";
+    const event = emitEvent({
+      run_id: RUN,
+      event_type: "groups.proposed",
+      source_agent: "grouping_agent",
+    });
+    resetEventBus();
+    const unsubscribe = vi.fn();
+    laser.subscribe.mockImplementation((_runId, onEvent) => {
+      queueMicrotask(() => onEvent(event));
+      return unsubscribe;
+    });
+
+    const controller = new AbortController();
+    const response = await GET(makeGetRequest(controller.signal), makeContext(RUN));
+    const events = await readEvents(response.body!.getReader(), 1);
+
+    expect(events).toEqual([event]);
+    expect(laser.ensureTopic).toHaveBeenCalledWith(RUN);
+    expect(laser.subscribe).toHaveBeenCalledWith(
+      RUN,
+      expect.any(Function),
+      expect.objectContaining({ fromOffset: 0n, onError: expect.any(Function) }),
+    );
+    expect(getSubscriberCount(RUN)).toBe(0);
+    controller.abort();
+    await vi.waitFor(() => expect(unsubscribe).toHaveBeenCalledOnce());
+  });
+
+  it("resumes a live Laser stream after the browser's last SSE event", async () => {
+    laser.mode = "live";
+    const previous = emitEvent({
+      run_id: RUN,
+      event_type: "assignment.uploaded",
+      source_agent: "assignment_architect",
+    });
+    resetEventBus();
+    laser.replay.mockResolvedValue([
+      { event: previous, offset: 12n },
+      { event: previous, offset: 14n },
+    ]);
+
+    const controller = new AbortController();
+    const request = new Request(`http://localhost/api/runs/${RUN}/events`, {
+      signal: controller.signal,
+      headers: { "Last-Event-ID": previous.event_id },
+    });
+    await GET(request, makeContext(RUN));
+
+    expect(laser.subscribe).toHaveBeenCalledWith(
+      RUN,
+      expect.any(Function),
+      expect.objectContaining({ fromOffset: 15n, onError: expect.any(Function) }),
+    );
+    controller.abort();
+  });
+
+  it("closes the SSE response when the live Laser subscription fails", async () => {
+    laser.mode = "live";
+    const unsubscribe = vi.fn();
+    laser.subscribe.mockReturnValue(unsubscribe);
+
+    const response = await GET(makeGetRequest(), makeContext(RUN));
+    const reader = response.body!.getReader();
+    const options = laser.subscribe.mock.calls[0][2];
+    options.onError(new Error("connection lost"));
+
+    await expect(reader.read()).resolves.toMatchObject({ done: true });
+    expect(unsubscribe).toHaveBeenCalledOnce();
   });
 });
 
