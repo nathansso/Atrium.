@@ -5,6 +5,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { eventTypes } from "@/contracts";
 import type { RunState } from "@/contracts";
+import { getAdapters } from "@/server/adapters";
 import { getGuildTraces } from "@/server/platform/guildWorkflow";
 import { getRunEvents, resetEventBus } from "@/server/events";
 import { createRun } from "@/server/coreLoop";
@@ -199,5 +200,29 @@ describe("approvePlan", () => {
     const approval = traces.find((entry) => entry.action === "lesson_plan.approved");
     expect(approval?.actor).toBe("professor");
     expect(approval?.details?.approved_by).toBe("Prof. Rivera");
+  });
+
+  it("resolves the final_plan gate on Guild's side, not just the local review item", async () => {
+    await simulateSubmissions(RUN_ID);
+
+    // This suite reuses RUN_ID across tests without resetting adapter state,
+    // so earlier tests may have already left resolved gates for this run —
+    // filter to the fresh pending one rather than assuming the first match.
+    const gatesBefore = await getAdapters().guild.listApprovals(RUN_ID);
+    const planGateBefore = gatesBefore.find(
+      (gate) => gate.gate_type === "final_plan" && gate.status === "pending",
+    );
+    expect(planGateBefore?.status).toBe("pending");
+
+    await approvePlan(RUN_ID, { approved_by: "Prof. Rivera" });
+
+    const gatesAfter = await getAdapters().guild.listApprovals(RUN_ID);
+    const planGateAfter = gatesAfter.find((gate) => gate.gate_id === planGateBefore?.gate_id);
+    expect(planGateAfter?.status).toBe("approved");
+    expect(planGateAfter?.resolved_at).not.toBeNull();
+
+    // The held low-confidence grade gate is untouched by approving the plan.
+    const gradeGate = gatesAfter.find((gate) => gate.gate_type === "low_confidence_grade");
+    expect(gradeGate?.status).toBe("pending");
   });
 });

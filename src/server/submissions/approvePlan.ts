@@ -7,7 +7,7 @@
  * low-confidence grade.
  */
 import type { RunState } from "@/contracts";
-import { getGuildTraces, trace } from "@/server/platform/guildWorkflow";
+import { getGuildTraces, resolveGuildApprovalsForRun, trace } from "@/server/platform/guildWorkflow";
 import type { GuildTrace } from "@/server/adapters";
 import { getRun, saveRun } from "./runProvider";
 
@@ -30,6 +30,14 @@ export async function approvePlan(runId: string, input: ApprovePlanInput = {}): 
     if (item.review_type === "final_plan" && item.status === "pending") {
       item.status = "approved";
     }
+  }
+
+  // Best effort: a Guild outage degrades the live gate, never the professor's
+  // approval — the local review_queue item above is already the record of truth.
+  try {
+    await resolveGuildApprovalsForRun(run.run_id, "final_plan", "approved");
+  } catch (error) {
+    console.warn(`[guild] failed to resolve final_plan gate for ${run.run_id}:`, error);
   }
 
   await trace({
