@@ -26,10 +26,10 @@ export async function POST(
     // Empty or non-JSON body is fine — approval works without one.
   }
 
-  const result = approvePlan(runId, input);
+  const result = await approvePlan(runId, input);
   if (!result.ok) {
     const status = result.error === "run_not_found" ? 404 : 409;
     return Response.json({ error: result.error }, { status });
   }
-  return Response.json({ run: result.run, audit: result.audit });
+  return Response.json({ run: result.run, traces: result.traces });
 }

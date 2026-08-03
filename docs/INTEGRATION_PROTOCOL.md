@@ -1,5 +1,10 @@
 # Integration and Merge Protocol
 
+> Architecture update: the old adapter seam is now internal infrastructure.
+> Application changes must use the RocketRide data plane for FalkorDB/LaserData
+> and the Guild control plane for agents, approvals, and traces. See
+> [ARCHITECTURE.md](ARCHITECTURE.md) before creating a new integration lane.
+
 ## Merge Order
 
 1. `person-d/backend-infra-integrations`

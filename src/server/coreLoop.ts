@@ -34,8 +34,6 @@ import {
   runAssignmentCurator,
   runAssignmentCuratorWithPipeline,
 } from "./agents/assignmentCurator";
-import { getAdapters } from "./adapters";
-import { syncClassroomGraph } from "./memory/classroomGraph";
 import {
   extractUploadedAssignment,
   type MotionProvenance,
@@ -46,6 +44,7 @@ import {
   registerAgents,
   runPipeline,
 } from "./sponsorBridge";
+import { rocketRidePipelinePort, syncClassroomMemory, writeRoomFormation } from "./platform/rocketRideDataPlane";
 
 /**
  * The deterministic upload-to-variants loop.
@@ -239,11 +238,9 @@ async function beginCoreRun(input: {
   await recordAgentRun(runId, "student_memory_agent", memory);
   await drainEventsToStream(updateRun(runId, (state) => state));
 
-  const { falkordb } = getAdapters();
-  let sharedBarriers: Awaited<ReturnType<typeof syncClassroomGraph>> = [];
+  let sharedBarriers: Awaited<ReturnType<typeof syncClassroomMemory>> = [];
   try {
-    sharedBarriers = await syncClassroomGraph({
-      falkordb,
+    sharedBarriers = await syncClassroomMemory({
       runId,
       students,
       concepts: architect.result.concepts.map((concept) => concept.concept_id),
@@ -268,15 +265,14 @@ async function beginCoreRun(input: {
     grouping: grouping.result,
     status: "grouped",
   }));
-  await recordAgentRun(runId, "grouping_agent", grouping);
+  // RocketRide's data plane persists the formation before downstream agents
+  // consume it, making the FalkorDB graph a durable input to later runs.
   try {
-    await falkordb.saveRoomFormation(runId, grouping.result.rooms);
+    await writeRoomFormation(runId, grouping.result.rooms);
   } catch (error) {
-    console.warn(
-      "[falkordb] room persistence failed; continuing with in-run room state.",
-      error,
-    );
+    console.warn(`[data-plane] room formation persistence failed for ${runId}:`, error);
   }
+  await recordAgentRun(runId, "grouping_agent", grouping);
   await drainEventsToStream(updateRun(runId, (state) => state));
 
   const accessibility = runAccessibility(
@@ -429,7 +425,7 @@ export async function createRunFromRequest(
     );
   }
 
-  const { rocketride } = getAdapters();
+  const rocketride = rocketRidePipelinePort();
   let assignment = parsed.assignment;
   let extractionProvenance: MotionProvenance | undefined;
 

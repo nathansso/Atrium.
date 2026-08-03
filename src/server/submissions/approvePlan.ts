@@ -7,8 +7,8 @@
  * low-confidence grade.
  */
 import type { RunState } from "@/contracts";
-import { getRunAudit, recordAudit } from "@/server/audit";
-import type { AuditEntry } from "@/server/audit";
+import { getGuildTraces, trace } from "@/server/platform/guildWorkflow";
+import type { GuildTrace } from "@/server/adapters";
 import { getRun, saveRun } from "./runProvider";
 
 export type ApprovePlanInput = {
@@ -17,10 +17,10 @@ export type ApprovePlanInput = {
 };
 
 export type ApprovePlanResult =
-  | { ok: true; run: RunState; audit: AuditEntry[] }
+  | { ok: true; run: RunState; traces: GuildTrace[] }
   | { ok: false; error: "run_not_found" | "no_lesson_plan" };
 
-export function approvePlan(runId: string, input: ApprovePlanInput = {}): ApprovePlanResult {
+export async function approvePlan(runId: string, input: ApprovePlanInput = {}): Promise<ApprovePlanResult> {
   const run = getRun(runId);
   if (!run) return { ok: false, error: "run_not_found" };
   if (!run.lesson_plan) return { ok: false, error: "no_lesson_plan" };
@@ -32,7 +32,7 @@ export function approvePlan(runId: string, input: ApprovePlanInput = {}): Approv
     }
   }
 
-  recordAudit({
+  await trace({
     run_id: run.run_id,
     actor: "professor",
     action: "lesson_plan.approved",
@@ -44,5 +44,5 @@ export function approvePlan(runId: string, input: ApprovePlanInput = {}): Approv
   });
 
   saveRun(run);
-  return { ok: true, run, audit: getRunAudit(run.run_id) };
+  return { ok: true, run, traces: await getGuildTraces(run.run_id) };
 }

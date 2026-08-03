@@ -7,7 +7,6 @@
  * same shape so lanes can swap implementations without touching callers.
  */
 import { agentNames, type AgentName } from "@/contracts";
-import { recordAudit } from "@/server/audit";
 import type {
   AdapterInfo,
   AgentHandoff,
@@ -16,6 +15,7 @@ import type {
   GuildAgentAdapter,
   GuildAgentRecord,
   GuildRunRecord,
+  GuildTrace,
 } from "./types";
 
 const DEFAULT_PERMISSIONS: Record<AgentName, string[]> = {
@@ -34,6 +34,8 @@ type GuildState = {
   runs: GuildRunRecord[];
   gates: ApprovalGate[];
   handoffs: AgentHandoff[];
+  traces: GuildTrace[];
+  traceCounter: number;
   gateCounter: number;
   handoffCounter: number;
 };
@@ -48,6 +50,8 @@ function getState(): GuildState {
       runs: [],
       gates: [],
       handoffs: [],
+      traces: [],
+      traceCounter: 0,
       gateCounter: 0,
       handoffCounter: 0,
     } satisfies GuildState;
@@ -77,7 +81,7 @@ export function createMockGuildAdapter(): GuildAgentAdapter {
         permissions: permissions ?? DEFAULT_PERMISSIONS[agent] ?? [],
       };
       state.agents.set(agent, record);
-      recordAudit({
+      await adapter.recordTrace({
         run_id: "global",
         actor: "system",
         action: `guild.register_agent:${agent}`,
@@ -103,7 +107,7 @@ export function createMockGuildAdapter(): GuildAgentAdapter {
         recorded_at: new Date().toISOString(),
       };
       getState().runs.push(stored);
-      recordAudit({
+      await adapter.recordTrace({
         run_id: record.run_id,
         actor: record.agent,
         action: `guild.agent_run:${record.status}`,
@@ -136,7 +140,7 @@ export function createMockGuildAdapter(): GuildAgentAdapter {
         at: new Date().toISOString(),
       };
       state.handoffs.push(handoff);
-      recordAudit({
+      await adapter.recordTrace({
         run_id: input.run_id,
         actor: input.from_agent,
         action: `guild.handoff:${input.to_agent}`,
@@ -165,7 +169,7 @@ export function createMockGuildAdapter(): GuildAgentAdapter {
         resolved_at: null,
       };
       state.gates.push(gate);
-      recordAudit({
+      await adapter.recordTrace({
         run_id: input.run_id,
         actor: "system",
         action: `guild.approval_requested:${input.gate_type}`,
@@ -187,13 +191,31 @@ export function createMockGuildAdapter(): GuildAgentAdapter {
       }
       gate.status = decision;
       gate.resolved_at = new Date().toISOString();
-      recordAudit({
+      await adapter.recordTrace({
         run_id: gate.run_id,
         actor: "professor",
         action: `guild.approval_${decision}:${gate.gate_type}`,
         details: { gate_id: gate.gate_id },
       });
       return gate;
+    },
+
+    async recordTrace(input) {
+      const state = getState();
+      state.traceCounter += 1;
+      const trace: GuildTrace = {
+        trace_id: `gtrace_${String(state.traceCounter).padStart(4, "0")}`,
+        timestamp: new Date().toISOString(),
+        evidence_refs: input.evidence_refs ?? [],
+        review_gate: input.review_gate ?? false,
+        ...input,
+      };
+      state.traces.push(trace);
+      return trace;
+    },
+
+    async listTraces(runId) {
+      return getState().traces.filter((trace) => trace.run_id === runId);
     },
   };
 
