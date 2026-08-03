@@ -107,6 +107,26 @@ export function firecrawlSearchQueries(query: FirecrawlSearchQuery): string[] {
   ];
 }
 
+/**
+ * Firecrawl ranks results for the full facet query, so a generic "responsible
+ * use" result can otherwise describe AI-in-education rather than the topic
+ * the educator asked us to teach. Only title/description matches are admitted
+ * to the curriculum; page markdown is deliberately excluded because a stray
+ * keyword in a long page is not adequate topic evidence.
+ */
+export function isTopicRelevantFirecrawlResult(
+  topic: string,
+  result: Pick<FirecrawlResult, "title" | "description">,
+): boolean {
+  const normalize = (value: string) => value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  const topicTerms = normalize(topic).split(" ").filter((term) => term.length >= 2);
+  const resultText = normalize([result.title, result.description].filter(Boolean).join(" "));
+  return topicTerms.length > 0 && topicTerms.every((term) => resultText.includes(term));
+}
+
 async function postSearch(
   body: unknown,
   apiKey: string,
@@ -181,7 +201,7 @@ export function createLiveFirecrawlAdapter(): FirecrawlResearchAdapter {
       const results = responses
         .flatMap(extractResults)
         .filter((result) => {
-          if (!result.url || uniqueUrls.has(result.url)) return false;
+          if (!result.url || uniqueUrls.has(result.url) || !isTopicRelevantFirecrawlResult(query.topic, result)) return false;
           uniqueUrls.add(result.url);
           return true;
         })
