@@ -17,7 +17,13 @@ import {
   type EventInput,
   type EventListener,
 } from "@/server/events";
-import type { ActivityRecord, AdapterInfo, LaserStreamAdapter, StreamedEvent } from "./types";
+import type {
+  ActivityRecord,
+  AdapterInfo,
+  LaserStreamAdapter,
+  StreamedEvent,
+  StreamSubscriptionOptions,
+} from "./types";
 
 type LaserState = {
   /** Run topic -> partition count, mirroring ensureTopic(). */
@@ -80,9 +86,19 @@ export function createMockLaserAdapter(): LaserStreamAdapter {
       state.activity.set(activity.run_id, records);
     },
 
-    subscribe(runId: string, onEvent: EventListener): () => void {
+    subscribe(
+      runId: string,
+      onEvent: EventListener,
+      options: StreamSubscriptionOptions = {},
+    ): () => void {
       void adapter.ensureTopic(runId);
-      return subscribeToRun(runId, onEvent);
+      const unsubscribe = subscribeToRun(runId, onEvent);
+      if (options.fromOffset !== undefined) {
+        for (const [index, event] of getRunEvents(runId).entries()) {
+          if (BigInt(index) >= options.fromOffset) onEvent(event);
+        }
+      }
+      return unsubscribe;
     },
 
     /**

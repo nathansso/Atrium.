@@ -20,7 +20,7 @@ export const eventTypeSchema = z.enum(eventTypes);
 export type EventType = z.infer<typeof eventTypeSchema>;
 
 export const agentEventSchema = z.object({
-  event_id: z.string().min(1),
+  event_id: z.string().min(1).regex(/^[^\r\n\0]+$/),
   event_type: eventTypeSchema,
   run_id: z.string().min(1),
   source_agent: agentNameSchema,
