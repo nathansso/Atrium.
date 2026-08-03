@@ -9,6 +9,7 @@
 import { misconceptionConcept, type AgentEvent, type ConceptId, type Room, type RunState, type Student } from "@/contracts";
 import { getAdapters } from "@/server/adapters";
 import type { PipelineRequest, PipelineResult } from "@/server/adapters";
+import type { CurriculumEvidence, GraphNeighborhood } from "@/server/adapters";
 import { syncClassroomGraph } from "@/server/memory/classroomGraph";
 
 const PUBLISHED_KEY = "__atrium_rocketride_published__";
@@ -62,6 +63,15 @@ export async function readGraph(runId: string, nodeId: string, concepts: Concept
 export async function readRelatedNeighborhoods(studentIds: string[]) {
   const graph = getAdapters().falkordb;
   return Promise.all([...studentIds].sort().map((studentId) => graph.neighborhood(studentId, 2)));
+}
+
+/** Write and read research citations through the RocketRide-owned data plane. */
+export async function writeCurriculumEvidence(evidence: CurriculumEvidence): Promise<number> {
+  return getAdapters().falkordb.saveCurriculumEvidence(evidence);
+}
+
+export async function readCurriculumEvidence(runId: string): Promise<GraphNeighborhood> {
+  return getAdapters().falkordb.curriculumEvidence(runId);
 }
 
 /** Materialise assessment findings before graph reads; writes stay in the data plane. */

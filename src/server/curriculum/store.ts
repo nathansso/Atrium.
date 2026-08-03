@@ -76,6 +76,13 @@ export function setApproval(
   return updated;
 }
 
+/** Resolve an active lesson run back to its curriculum launch sequence. */
+export function findRecordByLessonRun(runId: string): CurriculumRecord | undefined {
+  return [...store().records.values()].find((record) =>
+    record.launch?.lesson_runs.some((lesson) => lesson.run_id === runId),
+  );
+}
+
 /** Persist the idempotent launch record after the core run is created. */
 export function setLaunch(draftId: string, launch: CurriculumLaunch): CurriculumRecord | undefined {
   const s = store();

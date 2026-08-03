@@ -198,6 +198,13 @@ export const curriculumLaunchSchema = z.object({
   launched_by: z.string().min(1),
   launched_at: z.string().min(1),
   teaching_intent: z.string().min(1),
+  lesson_runs: z.array(z.object({
+    chunk_id: z.string().min(1),
+    title: z.string().min(1),
+    position: z.number().int().nonnegative(),
+    assignment_id: z.string().min(1),
+    run_id: z.string().min(1),
+  })).min(1),
 });
 export type CurriculumLaunch = z.infer<typeof curriculumLaunchSchema>;
 

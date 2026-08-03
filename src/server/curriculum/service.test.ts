@@ -52,7 +52,7 @@ describe("researchCurriculum", () => {
     expect(actions).toContain("curriculum.draft.ready");
   });
 
-  it("falls back to the deterministic mock when the live provider throws", async () => {
+  it("fails rather than substituting fixture evidence when Firecrawl is unavailable", async () => {
     const failing: FirecrawlResearchAdapter = {
       info: () => ({ name: "firecrawl", mode: "live", provider: "firecrawl-search" }),
       research: async () => {
@@ -60,15 +60,12 @@ describe("researchCurriculum", () => {
       },
     };
 
-    const outcome = await researchCurriculum(request, { now: fixedNow, firecrawl: failing });
-
-    expect(outcome.degraded).toBe(true);
-    expect(outcome.provider).toBe("deterministic-fixtures");
-    // A flaky provider degrades the draft rather than failing the request.
-    expect(outcome.draft.chunks.length).toBeGreaterThan(0);
+    await expect(researchCurriculum(request, { now: fixedNow, firecrawl: failing })).rejects.toThrow(
+      "provider unreachable",
+    );
   });
 
-  it("falls back when the live provider returns no grounded claims", async () => {
+  it("rejects live responses with no grounded claims", async () => {
     const empty: FirecrawlResearchAdapter = {
       info: () => ({ name: "firecrawl", mode: "live", provider: "firecrawl-search" }),
       research: async () => ({
@@ -79,10 +76,9 @@ describe("researchCurriculum", () => {
       }),
     };
 
-    const outcome = await researchCurriculum(request, { now: fixedNow, firecrawl: empty });
-
-    expect(outcome.degraded).toBe(true);
-    expect(outcome.provider).toBe("deterministic-fixtures");
+    await expect(researchCurriculum(request, { now: fixedNow, firecrawl: empty })).rejects.toThrow(
+      "no grounded claims",
+    );
   });
 
   it("fails clearly instead of relabeling the AI-literacy mock", async () => {

@@ -13,6 +13,7 @@ import type {
   AdapterInfo,
   FalkorGraphAdapter,
   GraphNeighborhood,
+  CurriculumEvidence,
   MasteryRecord,
   MisconceptionEdge,
   SharedBarrierGroup,
@@ -25,6 +26,7 @@ type FalkorState = {
   supports: Map<string, SupportId[]>;
   /** `${run_id}` -> rooms as formed. */
   rooms: Map<string, Room[]>;
+  curriculumEvidence: Map<string, GraphNeighborhood>;
   schemaReady: boolean;
 };
 
@@ -38,6 +40,7 @@ function getState(): FalkorState {
       misconceptions: [],
       supports: new Map(),
       rooms: new Map(),
+      curriculumEvidence: new Map(),
       schemaReady: false,
     } satisfies FalkorState;
   }
@@ -188,6 +191,55 @@ export function createMockFalkorAdapter(): FalkorGraphAdapter {
       }
 
       return { nodes, edges };
+    },
+
+    async saveCurriculumEvidence(evidence: CurriculumEvidence): Promise<number> {
+      const nodes: GraphNeighborhood["nodes"] = [];
+      const edges: GraphNeighborhood["edges"] = [];
+      const sourceNodeId = (sourceId: string) => `source:${evidence.run_id}:${sourceId}`;
+      const lessonNodeId = (chunkId: string) => `lesson:${evidence.run_id}:${chunkId}`;
+      const assignmentNodeId = `assignment:${evidence.run_id}:${evidence.assignment_id}`;
+      nodes.push({
+        id: assignmentNodeId,
+        label: `${evidence.topic} learning plan`,
+        kind: "Assignment",
+        props: { run_id: evidence.run_id, draft_id: evidence.draft_id },
+      });
+      for (const source of evidence.sources) {
+        nodes.push({
+          id: sourceNodeId(source.source_id),
+          label: source.title,
+          kind: "Source",
+          props: {
+            url: source.url,
+            publisher: source.publisher,
+            provenance: source.provenance,
+            retrieved_at: source.retrieved_at,
+          },
+        });
+      }
+      for (const chunk of evidence.chunks) {
+        const lessonId = lessonNodeId(chunk.chunk_id);
+        nodes.push({ id: lessonId, label: chunk.title, kind: "Lesson", props: { chunk_id: chunk.chunk_id } });
+        edges.push({ from: assignmentNodeId, to: lessonId, kind: "CONTAINS", props: {} });
+        for (const sourceId of chunk.citations) {
+          edges.push({ from: lessonId, to: sourceNodeId(sourceId), kind: "CITES", props: {} });
+        }
+        for (const conceptId of chunk.concept_ids) {
+          const conceptNodeId = `concept:${evidence.run_id}:${conceptId}`;
+          if (!nodes.some((node) => node.id === conceptNodeId)) {
+            nodes.push({ id: conceptNodeId, label: conceptId.replace(/[:_-]/g, " "), kind: "Concept", props: { concept_id: conceptId } });
+          }
+          edges.push({ from: lessonId, to: conceptNodeId, kind: "TEACHES", props: {} });
+        }
+      }
+      getState().curriculumEvidence.set(evidence.run_id, { nodes, edges });
+      return edges.length;
+    },
+
+    async curriculumEvidence(runId: string): Promise<GraphNeighborhood> {
+      const graph = getState().curriculumEvidence.get(runId);
+      return graph ? { nodes: [...graph.nodes], edges: [...graph.edges] } : { nodes: [], edges: [] };
     },
 
     /**

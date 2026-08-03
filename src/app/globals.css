@@ -58,9 +58,115 @@
   --font-label: "Silkscreen", ui-monospace, monospace;
   --font-body: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-wordmark: "Segoe Script", cursive;
 
   --shadow-text: 2px 2px 0 rgba(0, 0, 0, 0.65);
 
+}
+
+/* Run-scoped research provenance from the FalkorDB citation graph. */
+.evidence-graph {
+  min-height: 100%;
+  padding: 22px;
+  color: var(--ink, #17261d);
+}
+
+.evidence-graph--empty {
+  display: grid;
+  place-items: center;
+  color: var(--muted, #647267);
+  text-align: center;
+}
+
+.evidence-graph__header {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding-bottom: 14px;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.evidence-graph__header h2 {
+  margin: 3px 0 0;
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+.evidence-graph__legend {
+  margin: 12px 0 18px;
+  color: var(--muted, #647267);
+  font-size: 12px;
+}
+
+.evidence-graph__flow {
+  display: grid;
+  gap: 14px;
+}
+
+.evidence-graph__lesson {
+  display: grid;
+  grid-template-columns: minmax(115px, .85fr) 44px minmax(0, 1.45fr);
+  gap: 8px;
+  align-items: start;
+}
+
+.evidence-graph__edges {
+  display: grid;
+  gap: 9px;
+  padding-top: 11px;
+  color: var(--muted, #647267);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.evidence-graph__edges span::before {
+  content: "→ ";
+}
+
+.evidence-graph__targets {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(80px, .6fr);
+  gap: 8px;
+}
+
+.evidence-graph__sources,
+.evidence-graph__concepts {
+  display: grid;
+  gap: 7px;
+}
+
+.evidence-node {
+  display: grid;
+  gap: 3px;
+  padding: 9px;
+  border: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+  border-radius: 8px;
+  color: inherit;
+  background: color-mix(in srgb, white 72%, transparent);
+  text-decoration: none;
+}
+
+.evidence-node span {
+  color: var(--muted, #647267);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.evidence-node strong,
+.evidence-node--concept {
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.evidence-node--lesson { border-left: 3px solid #356c54; }
+.evidence-node--source { border-left: 3px solid #8c6737; }
+.evidence-node--source:hover { background: #fff8ed; }
+.evidence-node--concept { border-left: 3px solid #5474a1; }
+
+@media (max-width: 700px) {
+  .evidence-graph__lesson,
+  .evidence-graph__targets { grid-template-columns: 1fr; }
+  .evidence-graph__edges { display: none; }
 }
 
 /* The world commits to a single night-time visual world, so the palette does not
@@ -2659,6 +2765,7 @@ button {
 .workspace__panel > .panel,
 .workspace__panel > .feed,
 .workspace__panel > .morph,
+.workspace__panel > .evidence-graph,
 .workspace .panel,
 .workspace .feed,
 .workspace .morph {

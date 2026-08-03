@@ -2,9 +2,7 @@
  * Curriculum research orchestration — the async seam between the route and the
  * pure agent.
  *
- * It retrieves grounded evidence from Firecrawl (falling back to the deterministic
- * mock if the live provider fails at runtime, so a flaky provider degrades a
- * draft rather than failing the request), records the research lifecycle as
+ * It retrieves grounded evidence from Firecrawl, records the research lifecycle as
  * Guild traces, opens the mandatory educator-review gate via `recordAgentRun`,
  * and persists the draft. The curriculum lifecycle rides on Guild traces and
  * draft state — it deliberately does NOT emit into the run `eventTypes` union,
@@ -18,7 +16,6 @@ import {
   type ResearchRequest,
 } from "@/contracts";
 import { getAdapters } from "@/server/adapters";
-import { createMockFirecrawlAdapter } from "@/server/adapters/firecrawlMock";
 import type {
   FirecrawlResearchAdapter,
   FirecrawlResearchResult,
@@ -54,7 +51,7 @@ export class CurriculumNotFoundError extends Error {
 export type ResearchOptions = {
   /** Injectable clock so drafts are deterministic in tests. */
   now?: () => string;
-  /** Override the resolved adapter (test the provider-fallback path). */
+  /** Override the resolved adapter for isolated tests. */
   firecrawl?: FirecrawlResearchAdapter;
 };
 
@@ -62,7 +59,7 @@ export type ResearchOutcome = {
   draft: CurriculumDraft;
   agent_result: AgentResult<CurriculumDraft>;
   provider: string;
-  /** True when the live provider failed and the mock served the result. */
+  /** Always false: production research never substitutes fixture evidence. */
   degraded: boolean;
 };
 
@@ -142,33 +139,15 @@ export async function researchCurriculum(
 
   const primary = opts.firecrawl ?? getAdapters().firecrawl;
   let research: FirecrawlResearchResult;
-  let degraded = false;
   try {
     research = await primary.research(query);
     if (research.claims.length === 0) {
       throw new Error("The research provider returned no grounded claims.");
     }
   } catch (error) {
-    if (primary.info().mode === "mock") {
-      throw new CurriculumResearchError(
-        error instanceof Error ? error.message : String(error),
-      );
-    }
-    degraded = true;
-    console.warn("[curriculum] firecrawl research failed; falling back to mock.", error);
-    try {
-      research = await createMockFirecrawlAdapter().research(query);
-    } catch (fallbackError) {
-      throw new CurriculumResearchError(
-        fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
-      );
-    }
-    await safeTrace({
-      run_id: draftId,
-      actor: "system",
-      action: "curriculum.provider.fallback",
-      details: { error: String(error) },
-    });
+    throw new CurriculumResearchError(
+      error instanceof Error ? error.message : String(error),
+    );
   }
 
   if (research.claims.length === 0) {
@@ -185,7 +164,7 @@ export async function researchCurriculum(
       source_count: research.sources.length,
       claim_count: research.claims.length,
       provider: research.provider,
-      degraded,
+      degraded: false,
     },
   });
 
@@ -213,7 +192,7 @@ export async function researchCurriculum(
     },
   });
 
-  return { draft, agent_result: agentResult, provider: research.provider, degraded };
+  return { draft, agent_result: agentResult, provider: research.provider, degraded: false };
 }
 
 export type ApprovalOptions = { now?: () => string };

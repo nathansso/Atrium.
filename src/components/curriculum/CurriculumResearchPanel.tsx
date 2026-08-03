@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import type {
   CurriculumChunk,
   CurriculumDraft,
@@ -15,6 +16,8 @@ type ResearchResponse = {
   degraded: boolean;
 };
 
+type LaunchResponse = { run_id: string; reused: boolean };
+
 const WARNING_LABEL: Record<ResearchWarning["kind"], string> = {
   conflicting_evidence: "Conflicting evidence",
   weak_evidence: "Weak evidence",
@@ -24,6 +27,7 @@ const WARNING_LABEL: Record<ResearchWarning["kind"], string> = {
 };
 
 export function CurriculumResearchPanel() {
+  const router = useRouter();
   const [topic, setTopic] = useState("AI literacy");
   const [audience, setAudience] = useState("high school");
   const [teachingIntent, setTeachingIntent] = useState("critical, responsible use");
@@ -31,6 +35,7 @@ export function CurriculumResearchPanel() {
   const [maxSources, setMaxSources] = useState(8);
   const [loading, setLoading] = useState(false);
   const [decisionLoading, setDecisionLoading] = useState(false);
+  const [launchLoading, setLaunchLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ResearchResponse | null>(null);
   const [approval, setApproval] = useState<CurriculumDraft["approval_state"] | null>(null);
@@ -46,7 +51,7 @@ export function CurriculumResearchPanel() {
   );
 
   const decisionRecorded = approval === "approved" || approval === "rejected";
-  const workflowStep = !draft ? 1 : decisionRecorded ? 4 : 2;
+  const workflowStep = !draft ? 1 : approval === "approved" ? 4 : approval === "rejected" ? 3 : 2;
 
   async function runResearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -81,6 +86,28 @@ export function CurriculumResearchPanel() {
       );
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function launch() {
+    if (!draft || approval !== "approved" || launchLoading) return;
+    setLaunchLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/curriculum/${draft.draft_id}/launch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ launched_by: "educator", teaching_intent: teachingIntent.trim() || undefined }),
+      });
+      const body = await response.json();
+      if (!response.ok || !body?.run_id) {
+        throw new Error(body?.error?.message ?? "Could not launch the curriculum.");
+      }
+      router.push(`/demo?runId=${encodeURIComponent((body as LaunchResponse).run_id)}`);
+    } catch (launchError) {
+      setError(launchError instanceof Error ? launchError.message : String(launchError));
+    } finally {
+      setLaunchLoading(false);
     }
   }
 
@@ -128,7 +155,7 @@ export function CurriculumResearchPanel() {
           <AtriumIcon name="approve" size={22} />
           <div>
             <strong>Educator gate required</strong>
-            <span>Research drafts never start a classroom run.</span>
+            <span>Approval is required before a classroom run can launch.</span>
           </div>
         </div>
       </section>
@@ -138,6 +165,7 @@ export function CurriculumResearchPanel() {
           [1, "Research", "Gather cited evidence"],
           [2, "Review", "Check sequence and claims"],
           [3, "Decide", "Record an educator decision"],
+          [4, "Launch", "Open the learning run"],
         ].map(([step, title, description]) => {
           const stepNumber = Number(step);
           const state =
@@ -173,7 +201,7 @@ export function CurriculumResearchPanel() {
           </div>
           <span className="research-form__mode">
             <AtriumIcon name="connection" size={17} />
-            AI literacy mock · Firecrawl for live topics
+            Firecrawl search · cited sources required
           </span>
         </header>
 
@@ -285,7 +313,7 @@ export function CurriculumResearchPanel() {
               <AtriumIcon name="sources" size={18} />
               <span>
                 <strong>{result?.provider ?? "Unknown provider"}</strong>
-                {result?.degraded ? "Mock fallback used" : "Source retrieval complete"}
+                {result?.degraded ? "Fixture preview" : "Source retrieval complete"}
               </span>
             </div>
           </header>
@@ -402,7 +430,7 @@ export function CurriculumResearchPanel() {
                     type="button"
                     className="research-decision research-decision--approve"
                     onClick={() => void decide(false)}
-                    disabled={decisionLoading || decisionRecorded}
+                    disabled={decisionLoading || decisionRecorded || launchLoading}
                   >
                     <AtriumIcon name="approve" size={19} />
                     Approve draft
@@ -411,16 +439,27 @@ export function CurriculumResearchPanel() {
                     type="button"
                     className="research-decision research-decision--reject"
                     onClick={() => void decide(true)}
-                    disabled={decisionLoading || decisionRecorded}
+                    disabled={decisionLoading || decisionRecorded || launchLoading}
                   >
                     <AtriumIcon name="reject" size={19} />
                     Reject
                   </button>
                 </div>
-                {decisionRecorded && (
+                {approval === "approved" && (
                   <p className="research-approval__recorded">
-                    Decision recorded. Classroom runs remain unchanged.
+                    Approved. Launch creates one curriculum-backed classroom run.
                   </p>
+                )}
+                {approval === "approved" && (
+                  <button
+                    type="button"
+                    className="research-decision research-decision--approve"
+                    onClick={() => void launch()}
+                    disabled={launchLoading}
+                  >
+                    <AtriumIcon name="classroom" size={19} />
+                    {launchLoading ? "Launching…" : "Launch learning run"}
+                  </button>
                 )}
               </section>
 

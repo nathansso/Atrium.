@@ -2,12 +2,16 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AgentEvent, RoomId } from "@/contracts";
+import type { GraphNeighborhood } from "@/server/adapters/types";
 import { WorldEngine, installWorldGlobals } from "@/world/engine";
 import {
   ApiUnavailableError,
   approvePlan,
   backendAvailable,
   createRun,
+  getCurriculumEvidence,
+  getLessonProgress,
+  type LessonProgress,
   simulateSubmissions,
 } from "@/world/api";
 import { MOCK_RUN_ID, mockAssignment } from "@/world/mock/seed";
@@ -48,10 +52,11 @@ const STAGE_LABEL: Record<RunStage, string> = {
 
 export type AtriumController = ReturnType<typeof useAtrium>;
 
-export function useAtrium() {
+export function useAtrium({ initialRunId }: { initialRunId?: string } = {}) {
   const [engine] = useState(() => new WorldEngine({ minEventSpacing: 0.45 }));
 
   const sourceRef = useRef<RunSource | null>(null);
+  const seenEventIdsRef = useRef(new Set<string>());
   const [projection, setProjection] = useState<RunProjection>(createRunProjection);
   const [selection, setSelection] = useState<Selection>({ kind: "none" });
   const [stage, setStage] = useState<RunStage>("idle");
@@ -59,6 +64,12 @@ export function useAtrium() {
   const [backendDetected, setBackendDetected] = useState<boolean | null>(null);
   const [speed, setSpeed] = useState(1);
   const [notice, setNotice] = useState<string | null>(null);
+  const [evidence, setEvidence] = useState<GraphNeighborhood | null>(null);
+  const [lessonProgress, setLessonProgress] = useState<LessonProgress | null>(null);
+
+  const refreshLessonProgress = useCallback((runId: string) => {
+    return getLessonProgress(runId).then(setLessonProgress).catch(() => setLessonProgress(null));
+  }, []);
   const [assignmentText, setAssignmentText] = useState(String(mockAssignment.source_text ?? ""));
   const [teachingIntent, setTeachingIntent] = useState(String(mockAssignment.teaching_intent ?? ""));
 
@@ -93,6 +104,8 @@ export function useAtrium() {
 
   const sink = useCallback(
     (event: AgentEvent) => {
+      if (seenEventIdsRef.current.has(event.event_id)) return;
+      seenEventIdsRef.current.add(event.event_id);
       engine.push(event);
       setProjection((current) => applyEventToProjection(current, event));
       if (event.event_type === "assignment.variants.ready") {
@@ -105,6 +118,7 @@ export function useAtrium() {
         setStage("complete");
         setSelection({ kind: "building", id: "communication_beacon" });
       }
+      if (event.event_type === "lesson.plan.ready") setStage("complete");
     },
     [engine],
   );
@@ -113,6 +127,32 @@ export function useAtrium() {
     sourceRef.current?.stop();
     sourceRef.current = null;
   }, []);
+
+  /** Resume the phase-one run created by the approved Curriculum launch. */
+  useEffect(() => {
+    if (!initialRunId) return;
+    stopSource();
+    engine.reset();
+    seenEventIdsRef.current.clear();
+    setProjection(createRunProjection());
+    setSelection({ kind: "none" });
+    setNotice(null);
+    setTransport("live");
+    setBackendDetected(true);
+    setStage("phase_one");
+    setEvidence(null);
+    getCurriculumEvidence(initialRunId)
+      .then((result) => setEvidence({ nodes: result.nodes, edges: result.edges }))
+      .catch(() => setNotice("Could not load the run's FalkorDB evidence graph."));
+    void refreshLessonProgress(initialRunId);
+    const source = createSseSource(initialRunId, sink, {
+      terminalEvents: ["assignment.variants.ready"],
+      onError: () => setNotice("Could not resume the launched curriculum run."),
+    });
+    sourceRef.current = source;
+    source.start();
+    return () => source.stop();
+  }, [engine, initialRunId, refreshLessonProgress, sink, stopSource]);
 
   const startMockPhaseOne = useCallback(
     (runId: string) => {
@@ -129,6 +169,7 @@ export function useAtrium() {
   const startRun = useCallback(async () => {
     stopSource();
     engine.reset();
+    seenEventIdsRef.current.clear();
     setProjection(createRunProjection());
     setSelection({ kind: "none" });
     setNotice(null);
@@ -176,7 +217,15 @@ export function useAtrium() {
 
     if (transport === "live" && projection.runId) {
       try {
+        stopSource();
+        const source = createSseSource(projection.runId, sink, {
+          terminalEvents: ["lesson.plan.ready", "approval.requested"],
+          onError: () => setNotice("The classroom run completed, but its event stream disconnected."),
+        });
+        sourceRef.current = source;
+        source.start();
         await simulateSubmissions(projection.runId);
+        await refreshLessonProgress(projection.runId);
         return;
       } catch {
         setNotice("Simulation endpoint unavailable — replaying the frozen assessment phase.");
@@ -192,7 +241,12 @@ export function useAtrium() {
     );
     sourceRef.current = source;
     source.start();
-  }, [projection.runId, sink, speed, stopSource, transport]);
+  }, [projection.runId, refreshLessonProgress, sink, speed, stopSource, transport]);
+
+  const nextLesson = useCallback(() => {
+    if (!lessonProgress?.can_advance || !lessonProgress.next) return;
+    window.location.assign(`/demo?runId=${encodeURIComponent(lessonProgress.next.run_id)}`);
+  }, [lessonProgress]);
 
   const approve = useCallback(
     async (reviewId: string) => {
@@ -216,6 +270,7 @@ export function useAtrium() {
   const reset = useCallback(() => {
     stopSource();
     engine.reset();
+    seenEventIdsRef.current.clear();
     setProjection(createRunProjection());
     setSelection({ kind: "none" });
     setStage("idle");
@@ -250,6 +305,9 @@ export function useAtrium() {
     speed,
     setSpeed,
     notice,
+    evidence,
+    lessonProgress,
+    nextLesson,
     assignmentText,
     setAssignmentText,
     teachingIntent,
