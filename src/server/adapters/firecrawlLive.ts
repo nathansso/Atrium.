@@ -7,10 +7,13 @@
  *
  * Firecrawl is a retrieval provider — its `/search` returns ranked web results
  * (url/title/description), not an answer engine's structured claims. So the
- * live path grounds one claim per result under a single topic-derived concept:
- * a shallow-but-cited draft. Richer multi-concept claim extraction (Firecrawl
- * `/extract` with a schema, or a RocketRide LLM pass) is a deliberate follow-up;
- * the deterministic mock carries the full multi-concept fixture for demos.
+ * live path grounds one claim per result and assigns it to an evidence-matched
+ * lesson concept.  The mapping is deliberately deterministic: it only groups
+ * a result when terminology appears in that result, so it never invents an
+ * unsupported topic.  This produces a real ordered lesson sequence from a
+ * normal search while preserving each source-level citation. A richer
+ * extraction pass can replace this classification later without changing the
+ * curriculum contract.
  *
  * Runtime failures throw so the curriculum service can fall back to the mock,
  * degrading a draft rather than failing the request.
@@ -47,6 +50,41 @@ function topicSlug(topic: string): CurriculumConceptId {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
   return (slug.length > 0 ? slug : "topic") as CurriculumConceptId;
+}
+
+/**
+ * Assign a retrieved result to a teachable concept only when the result itself
+ * contains the matching signal. The order is intentionally pedagogical: core
+ * model types precede evaluation and responsible-use discussion in a lesson
+ * sequence. Generic results remain in a plainly-labelled foundation lesson.
+ */
+export function conceptForFirecrawlResult(
+  topic: string,
+  result: Pick<FirecrawlResult, "title" | "description" | "markdown">,
+): CurriculumConceptId {
+  const text = [result.title, result.description, result.markdown]
+    .filter((value): value is string => typeof value === "string")
+    .join(" ")
+    .toLowerCase();
+  const prefix = topicSlug(topic);
+  const suffix = (value: string) => `${prefix}:${value}` as CurriculumConceptId;
+
+  if (/\bsupervised\b|\blabel(?:led)? data\b|\bclassification\b|\bregression\b/.test(text)) {
+    return suffix("supervised-learning");
+  }
+  if (/\bunsupervised\b|\bunlabel(?:led)? data\b|\bclustering\b|\bdimensionality reduction\b/.test(text)) {
+    return suffix("unsupervised-learning");
+  }
+  if (/\btraining data\b|\bdataset\b|\bdata quality\b|\bfeatures?\b/.test(text)) {
+    return suffix("training-data");
+  }
+  if (/\bvalidation\b|\btest set\b|\bevaluation\b|\bmetrics?\b|\baccuracy\b/.test(text)) {
+    return suffix("model-evaluation");
+  }
+  if (/\bbias\b|\bfair(?:ness)?\b|\bethics?\b|\bresponsible\b|\bprivacy\b|\bsafety\b/.test(text)) {
+    return suffix("responsible-use");
+  }
+  return suffix("foundations");
 }
 
 async function postSearch(
@@ -123,8 +161,6 @@ export function createLiveFirecrawlAdapter(): FirecrawlResearchAdapter {
 
       const results = extractResults(json).slice(0, limit);
       const retrievedAt = new Date().toISOString();
-      const concept = topicSlug(query.topic);
-
       const sources: ResearchSource[] = [];
       const claims: ResearchClaim[] = [];
       results.forEach((result, index) => {
@@ -154,7 +190,7 @@ export function createLiveFirecrawlAdapter(): FirecrawlResearchAdapter {
           researchClaimSchema.parse({
             claim_id: `clm_${index + 1}`,
             statement: source.excerpt,
-            concept_id: concept,
+            concept_id: conceptForFirecrawlResult(query.topic, result),
             citations: [sourceId],
             confidence: 0.5,
             conflicting: false,

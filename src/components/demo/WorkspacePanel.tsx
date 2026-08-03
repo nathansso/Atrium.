@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import {
   AtriumIcon,
   type AtriumIconName,
@@ -72,6 +72,7 @@ export function WorkspacePanel({
     selectionKey: currentSelectionKey,
   });
   const idPrefix = useId();
+  const didSelectEvidence = useRef(false);
   const eventCount = projection.events.length;
   const assignmentStatus =
     projection.variants.length > 0
@@ -98,6 +99,14 @@ export function WorkspacePanel({
   const selectTab = (tab: WorkspaceTab) => {
     setWorkspaceState({ activeTab: tab, selectionKey: currentSelectionKey });
   };
+
+  // A launched curriculum has a source graph. Make that proof visible rather
+  // than relying on collaborators to discover a fourth workspace tab.
+  useEffect(() => {
+    if (didSelectEvidence.current || evidence === null || evidence.nodes.length === 0) return;
+    didSelectEvidence.current = true;
+    setWorkspaceState({ activeTab: "evidence", selectionKey: currentSelectionKey });
+  }, [currentSelectionKey, evidence]);
 
   const moveTabFocus = (
     event: KeyboardEvent<HTMLButtonElement>,

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { researchClaimSchema, researchSourceSchema } from "@/contracts";
 import { getAdapterStatus, getAdapters, resetAdapters } from "./index";
 import { createMockFirecrawlAdapter } from "./firecrawlMock";
+import { conceptForFirecrawlResult } from "./firecrawlLive";
 
 const query = { topic: "AI literacy", audience: "high school", maxResults: 8 };
 
@@ -85,5 +86,25 @@ describe("firecrawl adapter registration", () => {
     vi.stubEnv("SPONSOR_MODE", "live");
     await resetAdapters();
     expect(getAdapters().firecrawl.info().mode).toBe("mock");
+  });
+});
+
+describe("live Firecrawl lesson classification", () => {
+  it("creates a distinct, cited lesson concept for evidence-supported ML themes", () => {
+    expect(conceptForFirecrawlResult("machine learning", {
+      title: "Supervised learning with labelled data",
+    })).toBe("machine-learning:supervised-learning");
+    expect(conceptForFirecrawlResult("machine learning", {
+      description: "Unsupervised learning finds clusters in unlabeled data.",
+    })).toBe("machine-learning:unsupervised-learning");
+    expect(conceptForFirecrawlResult("machine learning", {
+      description: "Bias and fairness are central to responsible machine learning.",
+    })).toBe("machine-learning:responsible-use");
+  });
+
+  it("keeps a generic result in an honest foundations lesson", () => {
+    expect(conceptForFirecrawlResult("machine learning", {
+      title: "An introduction to machine learning",
+    })).toBe("machine-learning:foundations");
   });
 });
