@@ -70,7 +70,7 @@ jobs:
         if: env.SNYK_AVAILABLE == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        run: snyk monitor --all-projects --project-name=atrium
+        run: snyk monitor --project-name=atrium
 
       - name: Report unavailable Snyk Code scan
         if: env.SNYK_AVAILABLE == 'true' && steps.snyk_code.outcome == 'failure'

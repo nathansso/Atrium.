@@ -46,7 +46,7 @@ Then run:
 ```bash
 snyk test --all-projects --severity-threshold=high --fail-on=upgradable
 snyk code test --severity-threshold=high
-snyk monitor --all-projects --project-name=atrium
+snyk monitor --project-name=atrium
 ```
 
 Do not commit a Snyk token or place it in `NEXT_PUBLIC_*`. CI reads it only from
