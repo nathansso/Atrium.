@@ -5,7 +5,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { eventTypes } from "@/contracts";
 import type { RunState } from "@/contracts";
-import { getReviewGates, getRunAudit, resetAuditLog } from "@/server/audit";
+import { getGuildTraces } from "@/server/platform/guildWorkflow";
 import { getRunEvents, resetEventBus } from "@/server/events";
 import { createRun } from "@/server/coreLoop";
 import { approvePlan } from "./approvePlan";
@@ -24,7 +24,6 @@ describe("simulateSubmissions", () => {
   beforeEach(async () => {
     resetRun(RUN_ID);
     resetEventBus();
-    resetAuditLog();
   });
 
   it("emits every contract event in CONTRACTS.md order", async () => {
@@ -160,9 +159,9 @@ describe("simulateSubmissions", () => {
 
   it("records review gates for the held grade and the final plan", async () => {
     await simulateSubmissions(RUN_ID);
-    const gates = getReviewGates(RUN_ID);
-    expect(gates.some((gate) => gate.action === "assessment.completed")).toBe(true);
-    expect(gates.some((gate) => gate.action === "lesson.plan.ready")).toBe(true);
+    const traces = await getGuildTraces(RUN_ID);
+    expect(traces.some((trace) => trace.action === "guild.agent_run:needs_review")).toBe(true);
+    expect(traces.some((trace) => trace.action === "guild.approval_requested:final_plan")).toBe(true);
   });
 });
 
@@ -170,17 +169,16 @@ describe("approvePlan", () => {
   beforeEach(async () => {
     resetRun(RUN_ID);
     resetEventBus();
-    resetAuditLog();
   });
 
   it("returns run_not_found for unknown runs", async () => {
-    const result = approvePlan("missing-run");
+    const result = await approvePlan("missing-run");
     expect(result).toEqual({ ok: false, error: "run_not_found" });
   });
 
-  it("approves the plan, resolves the plan gate, and audits the decision", async () => {
+  it("approves the plan, resolves the plan gate, and traces the decision", async () => {
     await simulateSubmissions(RUN_ID);
-    const result = approvePlan(RUN_ID, { approved_by: "Prof. Rivera", note: "Ship it" });
+    const result = await approvePlan(RUN_ID, { approved_by: "Prof. Rivera", note: "Ship it" });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
@@ -197,8 +195,8 @@ describe("approvePlan", () => {
     const dev = result.run.assessments.find((assessment) => assessment.student_id === "stu_02");
     expect(dev?.review_state).toBe("needs_review");
 
-    const audit = getRunAudit(RUN_ID);
-    const approval = audit.find((entry) => entry.action === "lesson_plan.approved");
+    const traces = await getGuildTraces(RUN_ID);
+    const approval = traces.find((entry) => entry.action === "lesson_plan.approved");
     expect(approval?.actor).toBe("professor");
     expect(approval?.details?.approved_by).toBe("Prof. Rivera");
   });

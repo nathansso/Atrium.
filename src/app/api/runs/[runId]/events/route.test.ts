@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentEvent } from "@/contracts";
-import { resetAuditLog } from "@/server/audit";
 import { emitEvent, getRunEvents, getSubscriberCount, resetEventBus } from "@/server/events";
 import { GET, POST } from "./route";
 
@@ -13,6 +12,8 @@ const laser = vi.hoisted(() => ({
   subscribe: vi.fn(),
 }));
 
+const trace = vi.hoisted(() => vi.fn());
+
 vi.mock("@/server/adapters", () => ({
   getAdapters: () => ({
     laser: {
@@ -23,6 +24,8 @@ vi.mock("@/server/adapters", () => ({
     },
   }),
 }));
+
+vi.mock("@/server/platform/guildWorkflow", () => ({ trace }));
 
 function makeContext(runId: string) {
   return { params: Promise.resolve({ runId }) };
@@ -59,11 +62,11 @@ async function readEvents(
 describe("GET /api/runs/:runId/events", () => {
   beforeEach(() => {
     resetEventBus();
-    resetAuditLog();
     laser.mode = "mock";
     laser.ensureTopic.mockReset().mockResolvedValue(undefined);
     laser.replay.mockReset().mockResolvedValue([]);
     laser.subscribe.mockReset().mockReturnValue(() => {});
+    trace.mockReset().mockResolvedValue(undefined);
   });
 
   it("replays history, then streams live events, and unsubscribes on abort", async () => {
@@ -243,7 +246,6 @@ describe("GET /api/runs/:runId/events", () => {
 describe("POST /api/runs/:runId/events", () => {
   beforeEach(() => {
     resetEventBus();
-    resetAuditLog();
     vi.stubEnv("SPONSOR_MODE", "");
   });
 

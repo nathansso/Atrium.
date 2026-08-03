@@ -104,6 +104,8 @@ Students are grouped by their current academic barrier — **never** by diagnosi
 
 ## Architecture
 
+The enforced target architecture is documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). RocketRide is the data plane above FalkorDB and LaserData; Guild.ai manages all eight agents and is the system of record for workflow traces.
+
 ### System Overview
 
 ```mermaid
@@ -115,27 +117,21 @@ flowchart TD
 
   subgraph Server["Next.js App Router"]
     API["API Routes"]
-    AGENTS["8 Specialist Agents"]
-    ADAPTERS["Adapter Seam<br/>src/server/adapters/types.ts"]
-    AUDIT["Audit Log"]
+    GUILDCP["Guild.ai Control Plane<br/>8 agents · approvals · traces"]
+    ROCKETCP["RocketRide Data Plane<br/>pipelines · reads · writes"]
   end
 
-  subgraph Sponsors
+  subgraph Data
     FALKOR["FalkorDB<br/>MEMORY"]
     LASER["LaserData<br/>LIVE"]
-    ROCKET["RocketRide<br/>MOTION"]
-    GUILD["Guild.ai<br/>AGENTS"]
   end
 
   UI --> API
   PANELS --> API
-  API --> AGENTS
-  AGENTS --> ADAPTERS
-  ADAPTERS --> FALKOR
-  ADAPTERS --> LASER
-  ADAPTERS --> ROCKET
-  ADAPTERS --> GUILD
-  AGENTS --> AUDIT
+  API --> GUILDCP
+  GUILDCP --> ROCKETCP
+  ROCKETCP --> FALKOR
+  ROCKETCP --> LASER
   LASER --> SSE["SSE /api/runs/:id/events"]
   SSE --> UI
   SSE --> PANELS
@@ -149,8 +145,8 @@ Each mandated technology owns exactly one job. The boundaries are deliberate.
 |---|---|---|---|
 | **Memory** | FalkorDB | The classroom knowledge graph | Room formation — grouping *is* a graph traversal |
 | **Live** | LaserData | Apache Iggy topic per run | The event spine and all replay |
-| **Motion** | RocketRide | `.pipe` execution pipelines | Concept extraction, variants, lesson plans |
-| **Agents** | Guild.ai | Coordination and human gates | Handoffs and every approval checkpoint |
+| **Data plane** | RocketRide | Pipelines plus all FalkorDB/LaserData reads and writes | Assignment flow and durable classroom state |
+| **Control plane** | Guild.ai | 8 agents, handoffs, human gates, and traces | Workflow coordination and accountable decisions |
 
 #### A deliberate constraint
 
@@ -241,17 +237,18 @@ One full run, end to end:
 
 Every one of the 11 event types is defined and Zod-validated in `src/contracts/events.ts`.
 
-### The Adapter Seam
+### Platform Boundaries
 
-`src/server/adapters/types.ts` defines four interfaces. Agent code depends on those interfaces and never on a concrete implementation.
+`src/server/platform/rocketRideDataPlane.ts` is the only application-facing route to FalkorDB and LaserData. `src/server/platform/guildWorkflow.ts` is the application-facing route to Guild agents, gates, and traces. Provider adapters are internal SDK drivers only.
 
 ```ts
-const { falkordb, laser, rocketride, guild } = getAdapters();
+await publishRunEvents(run);
+await recordGuildAgentResult(runId, agent, result);
 ```
 
 This buys three things:
 
-1. **Parallel development.** Four people implement four adapters simultaneously without touching each other's files.
+1. **Clear ownership.** RocketRide owns data movement; Guild owns orchestration and traceability.
 2. **Deterministic demos.** `SPONSOR_MODE=mock` swaps in reproducible fixtures. No network, identical output every run.
 3. **Honest degradation.** Live mode is resolved *per adapter*, not globally.
 
@@ -493,7 +490,7 @@ npm run verify:world     # renderer smoke check
 
 ## Project Status
 
-Atrium is a hackathon project under active development. The domain loop, contracts, agents, renderer, and adapter seam are built; the four sponsor integrations are being implemented against that seam. See [docs/SPRINT_PLAN.md](docs/SPRINT_PLAN.md) for current lane ownership and status.
+Atrium is a hackathon project under active development. The domain loop, contracts, agents, renderer, RocketRide data plane, and Guild control plane are built. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for ownership rules and the migration plan.
 
 ---
 
