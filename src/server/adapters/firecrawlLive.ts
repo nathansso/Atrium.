@@ -58,10 +58,10 @@ function topicSlug(topic: string): CurriculumConceptId {
  * model types precede evaluation and responsible-use discussion in a lesson
  * sequence. Generic results remain in a plainly-labelled foundation lesson.
  */
-export function conceptForFirecrawlResult(
+export function conceptsForFirecrawlResult(
   topic: string,
   result: Pick<FirecrawlResult, "title" | "description" | "markdown">,
-): CurriculumConceptId {
+): CurriculumConceptId[] {
   const text = [result.title, result.description, result.markdown]
     .filter((value): value is string => typeof value === "string")
     .join(" ")
@@ -69,25 +69,36 @@ export function conceptForFirecrawlResult(
   const prefix = topicSlug(topic);
   const suffix = (value: string) => `${prefix}:${value}` as CurriculumConceptId;
 
+  const concepts: CurriculumConceptId[] = [];
+  const add = (value: string) => concepts.push(suffix(value));
+
   if (/\bsupervised\b|\blabel(?:led)? data\b|\bclassification\b|\bregression\b/.test(text)) {
-    return suffix("supervised-learning");
+    add("supervised-learning");
   }
   if (/\bunsupervised\b|\bunlabel(?:led)? data\b|\bclustering\b|\bdimensionality reduction\b/.test(text)) {
-    return suffix("unsupervised-learning");
+    add("unsupervised-learning");
   }
   if (/\btraining data\b|\bdataset\b|\bdata quality\b|\bfeatures?\b/.test(text)) {
-    return suffix("training-data");
+    add("training-data");
   }
   if (/\bvalidation\b|\btest set\b|\bevaluation\b|\bmetrics?\b|\baccuracy\b/.test(text)) {
-    return suffix("model-evaluation");
+    add("model-evaluation");
   }
   if (/\bbias\b|\bfair(?:ness)?\b|\bethics?\b|\bresponsible\b|\bprivacy\b|\bsafety\b/.test(text)) {
-    return suffix("responsible-use");
+    add("responsible-use");
   }
   if (/\bapplications?\b|\buse cases?\b|\bexamples?\b|\breal.world\b/.test(text)) {
-    return suffix("applications");
+    add("applications");
   }
-  return suffix("foundations");
+  return concepts.length > 0 ? concepts : [suffix("foundations")];
+}
+
+/** First matching concept for callers that only need a compact classification. */
+export function conceptForFirecrawlResult(
+  topic: string,
+  result: Pick<FirecrawlResult, "title" | "description" | "markdown">,
+): CurriculumConceptId {
+  return conceptsForFirecrawlResult(topic, result)[0];
 }
 
 /**
@@ -232,16 +243,18 @@ export function createLiveFirecrawlAdapter(): FirecrawlResearchAdapter {
           provenance: "firecrawl",
         });
         sources.push(source);
-        claims.push(
-          researchClaimSchema.parse({
-            claim_id: `clm_${index + 1}`,
-            statement: source.excerpt,
-            concept_id: conceptForFirecrawlResult(query.topic, result),
-            citations: [sourceId],
-            confidence: 0.5,
-            conflicting: false,
-          }),
-        );
+        conceptsForFirecrawlResult(query.topic, result).forEach((conceptId, conceptIndex) => {
+          claims.push(
+            researchClaimSchema.parse({
+              claim_id: `clm_${index + 1}_${conceptIndex + 1}`,
+              statement: source.excerpt,
+              concept_id: conceptId,
+              citations: [sourceId],
+              confidence: 0.5,
+              conflicting: false,
+            }),
+          );
+        });
       });
 
       if (claims.length === 0) {

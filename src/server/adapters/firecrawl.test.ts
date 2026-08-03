@@ -4,6 +4,7 @@ import { getAdapterStatus, getAdapters, resetAdapters } from "./index";
 import { createMockFirecrawlAdapter } from "./firecrawlMock";
 import {
   conceptForFirecrawlResult,
+  conceptsForFirecrawlResult,
   firecrawlSearchQueries,
   isTopicRelevantFirecrawlResult,
 } from "./firecrawlLive";
@@ -110,6 +111,16 @@ describe("live Firecrawl lesson classification", () => {
     expect(conceptForFirecrawlResult("machine learning", {
       title: "An introduction to machine learning",
     })).toBe("machine-learning:foundations");
+  });
+
+  it("retains every concept directly supported by a comparative source", () => {
+    expect(conceptsForFirecrawlResult("machine learning", {
+      title: "Supervised versus unsupervised machine learning",
+      description: "Compare labeled and unlabeled data.",
+    })).toEqual([
+      "machine-learning:supervised-learning",
+      "machine-learning:unsupervised-learning",
+    ]);
   });
 
   it("diversifies normal research across teachable evidence facets", () => {
