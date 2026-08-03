@@ -2,7 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { researchClaimSchema, researchSourceSchema } from "@/contracts";
 import { getAdapterStatus, getAdapters, resetAdapters } from "./index";
 import { createMockFirecrawlAdapter } from "./firecrawlMock";
-import { conceptForFirecrawlResult, firecrawlSearchQueries } from "./firecrawlLive";
+import {
+  conceptForFirecrawlResult,
+  firecrawlSearchQueries,
+  isTopicRelevantFirecrawlResult,
+} from "./firecrawlLive";
 
 const query = { topic: "AI literacy", audience: "high school", maxResults: 8 };
 
@@ -119,5 +123,16 @@ describe("live Firecrawl lesson classification", () => {
       "machine learning examples and applications - teaching high school (Use machine learning responsibly.)",
       "machine learning responsible use limitations - teaching high school (Use machine learning responsibly.)",
     ]);
+  });
+
+  it("rejects generic AI-in-education pages that do not evidence the requested topic", () => {
+    expect(isTopicRelevantFirecrawlResult("machine learning", {
+      title: "Artificial intelligence in classroom management",
+      description: "A review of educational purposes and ethical considerations.",
+    })).toBe(false);
+    expect(isTopicRelevantFirecrawlResult("machine learning", {
+      title: "Machine learning applications in health care",
+      description: "Examples of machine learning systems in medical imaging.",
+    })).toBe(true);
   });
 });
