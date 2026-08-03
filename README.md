@@ -208,6 +208,8 @@ The upload path is genuine motion: a real file enters an OCR/NER pipeline and co
 
 Eight specialist agents rather than one oversized prompt. Guild provides the registry, per-agent permissions, explicit handoffs, and — most visibly — **human-in-the-loop gates**.
 
+Two agents — the **Assignment Architect** and **Student Memory Agent** — are active from the moment a run starts. The remaining six register with Guild up front but only activate when their stage is reached: Grouping and Accessibility once context is ready, the Curator once rooms exist, and Assessment, Classroom Evolution, and the Lesson Planner once submissions and approvals arrive.
+
 Two gates are mandatory and cannot be configured away:
 
 - A low-confidence grade never publishes; it pauses and waits for a human
