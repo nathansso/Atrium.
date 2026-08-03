@@ -84,9 +84,14 @@ export function CurriculumResearchPanel() {
     });
   };
 
+  // Restore a research session the user navigated away from. This has to run
+  // after mount rather than from a lazy useState initializer: sessionStorage
+  // does not exist while the component renders on the server, so seeding state
+  // from it would make the client's first render disagree with the server HTML.
   useEffect(() => {
     const saved = readResearchSession();
     if (!saved) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- post-mount storage rehydration, see above
     setResult(saved.result);
     setApproval(saved.approval);
     setTopic(saved.topic);
