@@ -3,38 +3,56 @@ import type { ReactNode } from "react";
 type CanonicalAtriumIconName =
   | "activity"
   | "approve"
+  | "ask"
   | "assignment"
   | "classroom"
   | "close"
   | "connection"
+  | "course"
   | "details"
   | "external"
   | "help"
   | "keyboard"
   | "labels"
+  | "lesson"
+  | "mastered"
   | "memory"
   | "more"
+  | "notes"
   | "reject"
   | "research"
   | "reset"
+  | "saved"
+  | "schedule"
+  | "score"
+  | "search"
   | "sequence"
   | "skip"
   | "sources"
   | "speed"
   | "start"
+  | "streak"
+  | "timer"
   | "upload"
   | "view"
   | "warning";
 
 export type AtriumIconName =
   | CanonicalAtriumIconName
+  | "bookmark"
+  | "calendar"
+  | "chart"
+  | "clock"
   | "document"
   | "eye"
   | "fast-forward"
   | "graph"
   | "info"
+  | "library"
   | "play"
+  | "question"
   | "run"
+  | "star"
   | "status";
 
 export interface AtriumIconProps {
@@ -46,10 +64,16 @@ export interface AtriumIconProps {
 const ICON_ALIASES: Record<AtriumIconName, CanonicalAtriumIconName> = {
   activity: "activity",
   approve: "approve",
+  ask: "ask",
   assignment: "assignment",
+  bookmark: "saved",
+  calendar: "schedule",
+  chart: "score",
   classroom: "classroom",
+  clock: "timer",
   close: "close",
   connection: "connection",
+  course: "course",
   details: "details",
   document: "assignment",
   eye: "view",
@@ -60,19 +84,31 @@ const ICON_ALIASES: Record<AtriumIconName, CanonicalAtriumIconName> = {
   info: "details",
   keyboard: "keyboard",
   labels: "labels",
+  lesson: "lesson",
+  library: "course",
+  mastered: "mastered",
   memory: "memory",
   more: "more",
+  notes: "notes",
   play: "start",
+  question: "ask",
   reject: "reject",
   research: "research",
   reset: "reset",
   run: "classroom",
+  saved: "saved",
+  schedule: "schedule",
+  score: "score",
+  search: "search",
   sequence: "sequence",
   skip: "skip",
   sources: "sources",
   speed: "speed",
+  star: "streak",
   start: "start",
   status: "connection",
+  streak: "streak",
+  timer: "timer",
   upload: "upload",
   view: "view",
   warning: "warning",
@@ -205,6 +241,31 @@ const ICONS: Record<CanonicalAtriumIconName, ReactNode> = {
       <path d="M14 22H18V26H14Z" fill="currentColor" stroke="none" />
     </>
   ),
+
+  // Learning-domain glyphs. Drawn as filled 2x2 px units on the same 32x32 grid,
+  // so corners step rather than curve and every edge lands on a whole pixel.
+  // Open book: the unit a learner actually sits down to.
+  lesson: <path d="M4 4H28V6H4ZM2 6H4V24H2ZM14 6H18V26H14ZM28 6H30V24H28ZM6 10H12V12H6ZM20 10H26V12H20ZM6 16H12V18H6ZM20 16H26V18H20ZM4 24H14V26H4ZM18 24H28V26H18Z" fill="currentColor" stroke="none" />,
+  // Four modules: a sequence of lessons.
+  course: <path d="M4 2H12V4H4ZM20 2H28V4H20ZM2 4H4V12H2ZM12 4H14V12H12ZM18 4H20V12H18ZM28 4H30V12H28ZM4 12H12V14H4ZM20 12H28V14H20ZM4 18H12V20H4ZM20 18H28V20H20ZM2 20H4V28H2ZM12 20H14V28H12ZM18 20H20V28H18ZM28 20H30V28H28ZM4 28H12V30H4ZM20 28H28V30H20Z" fill="currentColor" stroke="none" />,
+  // Written notes kept against a lesson.
+  notes: <path d="M8 2H24V4H8ZM6 4H8V26H6ZM24 4H26V26H24ZM10 6H22V8H10ZM10 12H22V14H10ZM10 18H22V20H10ZM10 22H18V24H10ZM8 26H24V28H8Z" fill="currentColor" stroke="none" />,
+  // Dated work: what is booked, and when.
+  schedule: <path d="M8 2H10V8H8ZM22 2H24V8H22ZM4 6H8V8H4ZM10 6H22V8H10ZM24 6H28V8H24ZM2 8H4V26H2ZM28 8H30V26H28ZM4 12H28V14H4ZM8 16H12V20H8ZM14 16H18V20H14ZM20 16H24V20H20ZM4 26H28V28H4Z" fill="currentColor" stroke="none" />,
+  // Marked results, one bar per attempt.
+  score: <path d="M22 4H26V6H22ZM20 6H22V28H20ZM26 6H28V28H26ZM14 12H18V14H14ZM12 14H14V28H12ZM18 14H20V28H18ZM6 18H10V20H6ZM4 20H6V28H4ZM10 20H12V28H10ZM2 26H4V28H2ZM6 26H10V28H6ZM14 26H18V28H14ZM22 26H26V28H22ZM28 26H30V28H28Z" fill="currentColor" stroke="none" />,
+  // Skill cleared: a check inside the ring.
+  mastered: <path d="M10 2H22V4H10ZM8 4H10V6H8ZM22 4H24V6H22ZM6 6H8V8H6ZM24 6H26V8H24ZM4 8H6V10H4ZM26 8H28V10H26ZM2 10H4V22H2ZM28 10H30V22H28ZM22 12H24V14H22ZM20 14H22V16H20ZM10 16H12V18H10ZM18 16H20V18H18ZM12 18H14V20H12ZM16 18H18V20H16ZM14 20H16V22H14ZM4 22H6V24H4ZM26 22H28V24H26ZM6 24H8V26H6ZM24 24H26V26H24ZM8 26H10V28H8ZM22 26H24V28H22ZM10 28H22V30H10Z" fill="currentColor" stroke="none" />,
+  // Time left in a lesson or an open window.
+  timer: <path d="M10 2H22V4H10ZM8 4H10V6H8ZM22 4H24V6H22ZM6 6H8V8H6ZM24 6H26V8H24ZM4 8H6V10H4ZM14 8H16V18H14ZM26 8H28V10H26ZM2 10H4V22H2ZM28 10H30V22H28ZM16 16H22V18H16ZM4 22H6V24H4ZM26 22H28V24H26ZM6 24H8V26H6ZM24 24H26V26H24ZM8 26H10V28H8ZM22 26H24V28H22ZM10 28H22V30H10Z" fill="currentColor" stroke="none" />,
+  // Consecutive days of practice.
+  streak: <path d="M14 4H18V24H14ZM12 10H14V24H12ZM18 10H20V24H18ZM2 12H12V14H2ZM20 12H30V14H20ZM6 14H12V16H6ZM20 14H26V16H20ZM8 16H12V18H8ZM20 16H24V18H20ZM10 18H12V26H10ZM20 18H22V26H20ZM8 22H10V28H8ZM22 22H24V28H22Z" fill="currentColor" stroke="none" />,
+  // Find a lesson, a student or a source.
+  search: <path d="M12 2H16V4H12ZM8 4H12V6H8ZM16 4H20V6H16ZM6 6H8V8H6ZM20 6H22V8H20ZM4 8H6V12H4ZM22 8H24V12H22ZM2 12H4V16H2ZM24 12H26V16H24ZM4 16H6V20H4ZM22 16H24V20H22ZM6 20H8V22H6ZM20 20H22V22H20ZM8 22H12V24H8ZM16 22H20V24H16ZM22 22H26V24H22ZM12 24H16V26H12ZM24 24H28V26H24ZM26 26H30V28H26ZM28 28H30V30H28Z" fill="currentColor" stroke="none" />,
+  // A question raised for a human to answer.
+  ask: <path d="M4 4H28V6H4ZM2 6H4V22H2ZM28 6H30V22H28ZM8 12H12V16H8ZM14 12H18V16H14ZM20 12H24V16H20ZM4 22H28V24H4ZM8 24H26V26H8ZM6 26H10V28H6ZM6 28H8V30H6Z" fill="currentColor" stroke="none" />,
+  // Kept for later.
+  saved: <path d="M6 2H26V4H6ZM4 4H6V30H4ZM26 4H28V30H26ZM14 20H18V22H14ZM12 22H14V24H12ZM18 22H20V24H18ZM10 24H12V26H10ZM20 24H22V26H20ZM8 26H10V28H8ZM22 26H24V28H22ZM6 28H8V30H6ZM24 28H26V30H24Z" fill="currentColor" stroke="none" />,
 };
 
 export function AtriumIcon({ name, size = 24, className }: AtriumIconProps) {
