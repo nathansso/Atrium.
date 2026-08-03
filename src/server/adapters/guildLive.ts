@@ -46,6 +46,7 @@ const DEFAULT_PERMISSIONS: Record<AgentName, string[]> = {
   assessment_agent: ["read:submissions", "write:assessments", "request:review"],
   classroom_evolution_agent: ["read:assessments", "write:mastery", "write:rooms"],
   lesson_planner: ["read:mastery", "write:plan", "request:review"],
+  curriculum_research_agent: ["read:sources", "write:curriculum", "request:review"],
 };
 
 /** Which specialist agent backs each gate, and which env credential calls it. */

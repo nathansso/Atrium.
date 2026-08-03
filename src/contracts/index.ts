@@ -3,3 +3,4 @@ export * from "./agents";
 export * from "./events";
 export * from "./domain";
 export * from "./run";
+export * from "./curriculum";

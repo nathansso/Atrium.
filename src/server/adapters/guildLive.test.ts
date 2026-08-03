@@ -99,7 +99,7 @@ describe("Guild.ai — live adapter", () => {
     const guild = createLiveGuildAdapter();
 
     const registered = await guild.registerDefaultAgents();
-    expect(registered).toHaveLength(8);
+    expect(registered).toHaveLength(9);
 
     const handoff = await guild.handoff({
       run_id: RUN,
