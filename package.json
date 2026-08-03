@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "postinstall": "node scripts/patch-laserdata-tls.mjs",
     "dev": "next dev --port 3001",
     "build": "next build",
     "start": "next start",
