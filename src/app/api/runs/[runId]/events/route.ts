@@ -1,15 +1,18 @@
 /**
  * GET  /api/runs/:runId/events — SSE stream of agent events for a run.
- *      Replays full history, then streams live events. Send
- *      Accept: application/json (or ?format=json) for a plain history array.
+ *      Replays history, resumes after Last-Event-ID, then streams live events.
+ *      Send Accept: application/json (or ?format=json) for
+ *      `{ run_id, events }` history.
  * POST /api/runs/:runId/events — mock-mode-only event injector so the
  *      frontend can drive animations before the agent loop is merged.
  */
 import { z } from "zod";
 import { agentNames, eventTypes, type AgentEvent } from "@/contracts";
+import { getAdapters } from "@/server/adapters";
 import { trace } from "@/server/platform/guildWorkflow";
 import { getEnvConfig } from "@/server/config";
 import { emitEvent, getRunEvents, subscribeToRun } from "@/server/events";
+import { apiError } from "@/server/http";
 
 export const dynamic = "force-dynamic";
 
@@ -18,17 +21,48 @@ const KEEPALIVE_MS = 15_000;
 type RouteContext = { params: Promise<{ runId: string }> };
 
 function encodeSse(event: AgentEvent): Uint8Array {
-  return new TextEncoder().encode(`event: agent-event\ndata: ${JSON.stringify(event)}\n\n`);
+  return new TextEncoder().encode(
+    `id: ${event.event_id}\nevent: agent-event\ndata: ${JSON.stringify(event)}\n\n`,
+  );
 }
 
 export async function GET(request: Request, context: RouteContext): Promise<Response> {
   const { runId } = await context.params;
+  const laser = getAdapters().laser;
+  const live = laser.info().mode === "live";
 
+  const url = new URL(request.url);
   const wantsJson =
-    new URL(request.url).searchParams.get("format") === "json" ||
+    url.searchParams.get("format") === "json" ||
     (request.headers.get("accept") ?? "").includes("application/json");
   if (wantsJson) {
-    return Response.json({ run_id: runId, events: getRunEvents(runId) });
+    let history: AgentEvent[];
+    try {
+      history = live
+        ? (await laser.replay(runId)).map((record) => record.event)
+        : getRunEvents(runId);
+    } catch {
+      return apiError("laser_unavailable", "Live event history is unavailable.", 503);
+    }
+    const seen = new Set<string>();
+    const events = history.filter((event) => {
+      if (seen.has(event.event_id)) return false;
+      seen.add(event.event_id);
+      return true;
+    });
+    return Response.json({ run_id: runId, events });
+  }
+
+  let fromOffset = 0n;
+  const lastEventId = request.headers.get("last-event-id");
+  if (live && lastEventId) {
+    try {
+      for (const record of await laser.replay(runId)) {
+        if (record.event.event_id === lastEventId) fromOffset = record.offset + 1n;
+      }
+    } catch {
+      return apiError("laser_unavailable", "Live event history is unavailable.", 503);
+    }
   }
 
   let cleanup: (() => void) | null = null;
@@ -36,33 +70,50 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       let closed = false;
+      let cleaned = false;
+      const sent = new Set<string>();
 
       const send = (event: AgentEvent) => {
-        if (closed) return;
+        if (closed || sent.has(event.event_id)) return;
         try {
           controller.enqueue(encodeSse(event));
+          sent.add(event.event_id);
         } catch {
           closed = true;
+          cleanup?.();
         }
       };
 
-      // Replay history so late subscribers still see the full run.
-      for (const event of getRunEvents(runId)) {
-        send(event);
+      let unsubscribe: () => void;
+      if (live) {
+        // A cursor beginning at a durable offset replays history and then
+        // keeps polling, leaving no gap between two separate operations.
+        unsubscribe = laser.subscribe(runId, send, {
+          fromOffset,
+          onError: () => cleanup?.(),
+        });
+      } else {
+        const history = getRunEvents(runId);
+        const resumeIndex = lastEventId
+          ? history.findIndex((event) => event.event_id === lastEventId) + 1
+          : 0;
+        for (const event of history.slice(Math.max(0, resumeIndex))) send(event);
+        unsubscribe = subscribeToRun(runId, send);
       }
 
-      const unsubscribe = subscribeToRun(runId, send);
       const keepalive = setInterval(() => {
         if (closed) return;
         try {
           controller.enqueue(new TextEncoder().encode(`: keepalive\n\n`));
         } catch {
           closed = true;
+          cleanup?.();
         }
       }, KEEPALIVE_MS);
 
       cleanup = () => {
-        if (closed) return;
+        if (cleaned) return;
+        cleaned = true;
         closed = true;
         clearInterval(keepalive);
         unsubscribe();

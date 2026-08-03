@@ -128,6 +128,12 @@ export type StreamedEvent = {
   offset: bigint;
 };
 
+export type StreamSubscriptionOptions = {
+  /** Inclusive durable offset. Omit to receive only newly published events. */
+  fromOffset?: bigint;
+  onError?: (error: unknown) => void;
+};
+
 /** Live student activity arriving mid-run — the "motion" input signal. */
 export type ActivityRecord = {
   run_id: string;
@@ -151,10 +157,14 @@ export interface LaserStreamAdapter {
    * Subscribe to a run topic. Delivery is at-least-once, so the listener
    * must be idempotent. Returns an unsubscribe function.
    */
-  subscribe(runId: string, onEvent: EventListener): () => void;
+  subscribe(
+    runId: string,
+    onEvent: EventListener,
+    options?: StreamSubscriptionOptions,
+  ): () => void;
   /** Durable replay from an offset — this is what the UI scrubber reads. */
   replay(runId: string, fromOffset?: bigint): Promise<StreamedEvent[]>;
-  /** Highest committed offset for the run topic. */
+  /** Highest durable record offset for the run topic. */
   latestOffset(runId: string): Promise<bigint>;
   /** Run topics this connection has seen. */
   listTopics(): Promise<string[]>;

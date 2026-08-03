@@ -15,7 +15,7 @@ const SECTIONS: ReadonlyArray<{
   icon: AtriumIconName;
   label: string;
 }> = [
-  { id: "classroom", href: "/", icon: "classroom", label: "Classroom" },
+  { id: "classroom", href: "/demo", icon: "classroom", label: "Classroom" },
   { id: "research", href: "/curriculum", icon: "research", label: "Research" },
 ];
 

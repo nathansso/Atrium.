@@ -21,11 +21,20 @@ import type { Laser } from "@laserdata/laser-sdk";
 import { agentEventSchema, type AgentEvent } from "@/contracts";
 import { getEnvConfig } from "@/server/config";
 import { createEvent, type EventInput, type EventListener } from "@/server/events";
-import type { ActivityRecord, AdapterInfo, LaserStreamAdapter, StreamedEvent } from "./types";
+import type {
+  ActivityRecord,
+  AdapterInfo,
+  LaserStreamAdapter,
+  StreamedEvent,
+  StreamSubscriptionOptions,
+} from "./types";
 
 /** Iggy topic names allow alphanumerics, dashes and underscores. */
 function topicName(runId: string): string {
-  return `run-${runId}`.replace(/[^A-Za-z0-9_-]/g, "-");
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(runId)) {
+    throw new Error("Run IDs must contain only letters, numbers, dashes, or underscores");
+  }
+  return `run-${runId}`;
 }
 
 type GlobalWithLaser = typeof globalThis & {
@@ -58,12 +67,12 @@ function ensuredTopics(): Set<string> {
   return store.__atrium_laser_topics__;
 }
 
-async function topicFor(runId: string, partitions = 1) {
+async function topicFor(runId: string, partitions = 1, create = false) {
+  const name = topicName(runId);
   const laser = await connect();
   const config = getEnvConfig();
-  const name = topicName(runId);
   const topic = laser.stream(config.laserStream).topic(name);
-  if (!ensuredTopics().has(name)) {
+  if (create && !ensuredTopics().has(name)) {
     await topic.ensure(partitions);
     ensuredTopics().add(name);
   }
@@ -72,14 +81,16 @@ async function topicFor(runId: string, partitions = 1) {
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
+const REPLAY_BATCH_SIZE = 500;
 
 /**
  * Decodes one Iggy message back into an AgentEvent. Parsing is strict: a
  * malformed frame is skipped rather than allowed to poison a replay.
  */
-function decodeEvent(payload: Uint8Array): AgentEvent | null {
+function decodeEvent(payload: Uint8Array, runId: string): AgentEvent | null {
   try {
-    return agentEventSchema.parse(JSON.parse(decoder.decode(payload)));
+    const event = agentEventSchema.parse(JSON.parse(decoder.decode(payload)));
+    return event.run_id === runId ? event : null;
   } catch {
     return null;
   }
@@ -92,11 +103,11 @@ export function createLiveLaserAdapter(): LaserStreamAdapter {
     },
 
     async ensureTopic(runId: string, partitions = 1): Promise<void> {
-      await topicFor(runId, partitions);
+      await topicFor(runId, partitions, true);
     },
 
     async publish(event: AgentEvent): Promise<void> {
-      const topic = await topicFor(event.run_id);
+      const topic = await topicFor(event.run_id, 1, true);
       await topic.send(encoder.encode(JSON.stringify(event)));
     },
 
@@ -112,7 +123,7 @@ export function createLiveLaserAdapter(): LaserStreamAdapter {
      * in the order they actually happened.
      */
     async ingestActivity(activity: ActivityRecord): Promise<void> {
-      const topic = await topicFor(activity.run_id);
+      const topic = await topicFor(activity.run_id, 1, true);
       // `record_type`, not `kind` — ActivityRecord already uses `kind` for
       // submission/attempt/hint_request/idle, which must survive the round trip.
       await topic.send(
@@ -120,15 +131,23 @@ export function createLiveLaserAdapter(): LaserStreamAdapter {
       );
     },
 
-    subscribe(runId: string, onEvent: EventListener): () => void {
+    subscribe(
+      runId: string,
+      onEvent: EventListener,
+      options: StreamSubscriptionOptions = {},
+    ): () => void {
       const controller = new AbortController();
 
       void (async () => {
         try {
           const topic = await topicFor(runId);
-          const consumer = topic.consumer(0, { autoCommit: true });
-          for await (const message of consumer.stream({ signal: controller.signal })) {
-            const event = decodeEvent(message.payload);
+          const messages = options.fromOffset === undefined
+            ? topic.consumer(0, { autoCommit: true }).stream({ signal: controller.signal })
+            : (await topic.replay())
+                .fromOffsets(new Map([[0, options.fromOffset]]))
+                .stream({ signal: controller.signal });
+          for await (const message of messages) {
+            const event = decodeEvent(message.payload, runId);
             if (!event) continue;
             try {
               onEvent(event);
@@ -139,6 +158,7 @@ export function createLiveLaserAdapter(): LaserStreamAdapter {
         } catch (error) {
           if (!controller.signal.aborted) {
             console.error(`[laser] subscription to ${runId} ended`, error);
+            options.onError?.(error);
           }
         }
       })();
@@ -149,7 +169,7 @@ export function createLiveLaserAdapter(): LaserStreamAdapter {
     /** Durable replay from an offset — what the UI scrubber reads. */
     async replay(runId: string, fromOffset = 0n): Promise<StreamedEvent[]> {
       const topic = await topicFor(runId);
-      const cursor = (await topic.replay({ batchSize: 500 })).fromOffsets(
+      const cursor = (await topic.replay({ batchSize: REPLAY_BATCH_SIZE })).fromOffsets(
         new Map([[0, fromOffset]]),
       );
 
@@ -159,7 +179,7 @@ export function createLiveLaserAdapter(): LaserStreamAdapter {
         const batch = await cursor.poll();
         if (batch.length === 0) break;
         for (const message of batch) {
-          const event = decodeEvent(message.payload);
+          const event = decodeEvent(message.payload, runId);
           if (event) out.push({ event, offset: message.offset });
         }
       }
@@ -168,10 +188,15 @@ export function createLiveLaserAdapter(): LaserStreamAdapter {
 
     async latestOffset(runId: string): Promise<bigint> {
       const topic = await topicFor(runId);
-      const stored = await topic.consumer(0, { autoCommit: false }).storedOffset(0);
-      if (stored) return stored.currentOffset;
-      const all = await adapter.replay(runId);
-      return all.at(-1)?.offset ?? 0n;
+      const cursor = await topic.replay({ batchSize: REPLAY_BATCH_SIZE });
+      let latest = -1n;
+      for (;;) {
+        const batch = await cursor.poll();
+        if (batch.length === 0) return latest;
+        for (const message of batch) {
+          if (message.offset > latest) latest = message.offset;
+        }
+      }
     },
 
     async listTopics(): Promise<string[]> {

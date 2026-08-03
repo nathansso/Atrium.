@@ -274,6 +274,64 @@ describe("LaserData — live layer", () => {
     expect(seen).toEqual(["groups.proposed"]);
   });
 
+  it("replays from an offset before continuing a subscription", async () => {
+    const { laser } = getAdapters();
+    await laser.emit({
+      event_type: "assignment.uploaded",
+      run_id: RUN,
+      source_agent: "assignment_architect",
+      payload: {},
+    });
+    await laser.emit({
+      event_type: "assignment.concepts.extracted",
+      run_id: RUN,
+      source_agent: "assignment_architect",
+      payload: {},
+    });
+
+    const seen: string[] = [];
+    const unsubscribe = laser.subscribe(
+      RUN,
+      (event) => seen.push(event.event_type),
+      { fromOffset: 1n },
+    );
+    await laser.emit({
+      event_type: "groups.proposed",
+      run_id: RUN,
+      source_agent: "grouping_agent",
+      payload: {},
+    });
+    unsubscribe();
+
+    expect(seen).toEqual(["assignment.concepts.extracted", "groups.proposed"]);
+  });
+
+  it("continues live when a subscription offset is beyond existing history", async () => {
+    const { laser } = getAdapters();
+    await laser.emit({
+      event_type: "assignment.uploaded",
+      run_id: RUN,
+      source_agent: "assignment_architect",
+      payload: {},
+    });
+
+    const seen: string[] = [];
+    const unsubscribe = laser.subscribe(
+      RUN,
+      (event) => seen.push(event.event_type),
+      { fromOffset: 99n },
+    );
+    await laser.emit({
+      event_type: "groups.proposed",
+      run_id: RUN,
+      source_agent: "grouping_agent",
+      payload: {},
+    });
+    unsubscribe();
+
+    expect(seen).toEqual(["groups.proposed"]);
+  });
+
   it("ingests live student activity onto the run topic", async () => {
     const { laser } = getAdapters();
     await laser.ingestActivity({

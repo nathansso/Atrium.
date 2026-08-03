@@ -13,7 +13,7 @@ export default function CurriculumPage() {
   return (
     <main className="research-page">
       <header className="research-appbar">
-        <Link href="/" className="brand research-appbar__brand" aria-label="Atrium classroom">
+        <Link href="/" className="brand research-appbar__brand" aria-label="Atrium home">
           <span className="brand__wordmark">Atrium</span>
           <span className="brand__descriptor">Adaptive classroom intelligence</span>
         </Link>
