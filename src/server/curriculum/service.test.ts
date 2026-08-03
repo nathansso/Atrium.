@@ -4,7 +4,9 @@ import { getAdapters, resetAdapters } from "@/server/adapters";
 import type { FirecrawlResearchAdapter } from "@/server/adapters/types";
 import {
   approveCurriculum,
+  CurriculumDecisionConflictError,
   CurriculumNotFoundError,
+  CurriculumResearchError,
   researchCurriculum,
 } from "./service";
 import { getDraft, resetCurriculumStore } from "./store";
@@ -36,7 +38,12 @@ describe("researchCurriculum", () => {
 
     // The Guild educator-review gate is open.
     const gates = await getAdapters().guild.listApprovals("draft_0001");
-    expect(gates.length).toBeGreaterThanOrEqual(1);
+    expect(gates).toHaveLength(1);
+    expect(gates[0]).toMatchObject({
+      gate_type: "curriculum_draft",
+      subject_id: "draft_0001",
+      status: "pending",
+    });
 
     // The research lifecycle is recorded as Guild traces.
     const actions = (await getAdapters().guild.listTraces("draft_0001")).map((t) => t.action);
@@ -60,6 +67,34 @@ describe("researchCurriculum", () => {
     // A flaky provider degrades the draft rather than failing the request.
     expect(outcome.draft.chunks.length).toBeGreaterThan(0);
   });
+
+  it("falls back when the live provider returns no grounded claims", async () => {
+    const empty: FirecrawlResearchAdapter = {
+      info: () => ({ name: "firecrawl", mode: "live", provider: "firecrawl-search" }),
+      research: async () => ({
+        provider: "firecrawl-search",
+        deterministic: false,
+        sources: [],
+        claims: [],
+      }),
+    };
+
+    const outcome = await researchCurriculum(request, { now: fixedNow, firecrawl: empty });
+
+    expect(outcome.degraded).toBe(true);
+    expect(outcome.provider).toBe("deterministic-fixtures");
+  });
+
+  it("fails clearly instead of relabeling the AI-literacy mock", async () => {
+    const unsupported = researchRequestSchema.parse({
+      topic: "photosynthesis",
+      audience: "high school",
+    });
+
+    await expect(researchCurriculum(unsupported, { now: fixedNow })).rejects.toThrow(
+      CurriculumResearchError,
+    );
+  });
 });
 
 describe("approveCurriculum", () => {
@@ -76,6 +111,12 @@ describe("approveCurriculum", () => {
     expect(approval.approved_by).toBe("Ms. Rivera");
     expect(approved.approval_state).toBe("approved");
     expect(getDraft(draft.draft_id)?.approval_state).toBe("approved");
+    const [gate] = await getAdapters().guild.listApprovals(draft.draft_id);
+    expect(gate).toMatchObject({ gate_type: "curriculum_draft", status: "approved" });
+    const actions = (await getAdapters().guild.listTraces(draft.draft_id)).map(
+      (entry) => entry.action,
+    );
+    expect(actions).toContain("guild.approval_approved:curriculum_draft");
   });
 
   it("supports rejection", async () => {
@@ -86,6 +127,32 @@ describe("approveCurriculum", () => {
       { now: fixedNow },
     );
     expect(rejected.approval_state).toBe("rejected");
+    const [gate] = await getAdapters().guild.listApprovals(draft.draft_id);
+    expect(gate).toMatchObject({ gate_type: "curriculum_draft", status: "rejected" });
+  });
+
+  it("keeps identical retries idempotent and rejects a conflicting decision", async () => {
+    const { draft } = await researchCurriculum(request, { now: fixedNow });
+    const first = await approveCurriculum(
+      draft.draft_id,
+      curriculumApprovalRequestSchema.parse({ approved_by: "Ms. Rivera" }),
+      { now: () => "2026-08-03T01:00:00.000Z" },
+    );
+    const retry = await approveCurriculum(
+      draft.draft_id,
+      curriculumApprovalRequestSchema.parse({ approved_by: "Ms. Rivera" }),
+      { now: () => "2026-08-03T02:00:00.000Z" },
+    );
+
+    expect(retry.approval).toEqual(first.approval);
+    await expect(
+      approveCurriculum(
+        draft.draft_id,
+        curriculumApprovalRequestSchema.parse({ reject: true }),
+      ),
+    ).rejects.toBeInstanceOf(CurriculumDecisionConflictError);
+    const [gate] = await getAdapters().guild.listApprovals(draft.draft_id);
+    expect(gate.status).toBe("approved");
   });
 
   it("throws CurriculumNotFoundError for an unknown draft", async () => {

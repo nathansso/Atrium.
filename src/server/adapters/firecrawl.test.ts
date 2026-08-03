@@ -47,6 +47,15 @@ describe("firecrawl mock adapter", () => {
       expect(claim.citations.every((ref) => kept.has(ref))).toBe(true);
     }
   });
+
+  it("does not relabel the AI-literacy fixture as another topic", async () => {
+    await expect(
+      createMockFirecrawlAdapter().research({
+        ...query,
+        topic: "photosynthesis",
+      }),
+    ).rejects.toThrow("supports AI literacy only");
+  });
 });
 
 describe("firecrawl adapter registration", () => {

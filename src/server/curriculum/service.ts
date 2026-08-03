@@ -75,6 +75,47 @@ async function safeTrace(input: GuildTraceInput): Promise<void> {
   }
 }
 
+/** A recorded educator decision is immutable for this draft. */
+export class CurriculumDecisionConflictError extends Error {
+  constructor(
+    public readonly draftId: string,
+    public readonly existing: CurriculumApproval["state"],
+    public readonly requested: "approved" | "rejected",
+  ) {
+    super(
+      `Curriculum draft "${draftId}" is already ${existing}; it cannot be changed to ${requested}.`,
+    );
+    this.name = "CurriculumDecisionConflictError";
+  }
+}
+
+/** Resolve only the review gate owned by this curriculum draft. */
+async function safeResolveCurriculumGate(
+  draftId: string,
+  decision: "approved" | "rejected",
+): Promise<void> {
+  try {
+    const guild = getAdapters().guild;
+    const gates = await guild.listApprovals(draftId);
+    const gate =
+      gates.find(
+        (candidate) =>
+          candidate.status === "pending" &&
+          candidate.gate_type === "curriculum_draft" &&
+          candidate.subject_id === draftId,
+      ) ??
+      gates.find(
+        (candidate) =>
+          candidate.status === "pending" &&
+          candidate.gate_type === "low_confidence_grade" &&
+          candidate.subject_id === AGENT,
+      );
+    if (gate) await guild.resolveApproval(gate.gate_id, decision);
+  } catch (error) {
+    console.warn(`[curriculum] guild approval resolution failed (${draftId}):`, error);
+  }
+}
+
 export async function researchCurriculum(
   request: ResearchRequest,
   opts: ResearchOptions = {},
@@ -104,10 +145,24 @@ export async function researchCurriculum(
   let degraded = false;
   try {
     research = await primary.research(query);
+    if (research.claims.length === 0) {
+      throw new Error("The research provider returned no grounded claims.");
+    }
   } catch (error) {
+    if (primary.info().mode === "mock") {
+      throw new CurriculumResearchError(
+        error instanceof Error ? error.message : String(error),
+      );
+    }
     degraded = true;
     console.warn("[curriculum] firecrawl research failed; falling back to mock.", error);
-    research = await createMockFirecrawlAdapter().research(query);
+    try {
+      research = await createMockFirecrawlAdapter().research(query);
+    } catch (fallbackError) {
+      throw new CurriculumResearchError(
+        fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
+      );
+    }
     await safeTrace({
       run_id: draftId,
       actor: "system",
@@ -178,6 +233,17 @@ export async function approveCurriculum(
   if (!record) throw new CurriculumNotFoundError(draftId);
 
   const state = request.reject ? "rejected" : "approved";
+  if (record.approval) {
+    if (record.approval.state === state) {
+      await safeResolveCurriculumGate(draftId, state);
+      return { draft: record.draft, approval: record.approval };
+    }
+    throw new CurriculumDecisionConflictError(
+      draftId,
+      record.approval.state,
+      state,
+    );
+  }
   const approval: CurriculumApproval = {
     draft_id: draftId,
     state,
@@ -186,6 +252,7 @@ export async function approveCurriculum(
     decided_at: now(),
   };
   const updated = setApproval(draftId, approval);
+  await safeResolveCurriculumGate(draftId, state);
 
   await safeTrace({
     run_id: draftId,

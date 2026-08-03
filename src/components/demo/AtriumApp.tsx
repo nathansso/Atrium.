@@ -2,14 +2,12 @@
 
 import { useEffect, useMemo } from "react";
 import { eventTypes } from "@/contracts";
-import { AgentFeed } from "@/components/panels/AgentFeed";
-import { AssignmentMorphPanel } from "@/components/panels/AssignmentMorphPanel";
-import { DetailPanel } from "@/components/panels/DetailPanel";
 import { WorldStage } from "@/components/world/WorldStage";
 import { CommandRail } from "./CommandRail";
 import { PhaseTimeline } from "./PhaseTimeline";
 import { Toasts, toastForEvent } from "./Toasts";
 import { useAtrium } from "./useAtrium";
+import { WorkspacePanel } from "./WorkspacePanel";
 
 export function AtriumApp() {
   const controller = useAtrium();
@@ -104,21 +102,15 @@ export function AtriumApp() {
             selection={selection}
             onSelect={setSelection}
           />
-          <AssignmentMorphPanel projection={projection} />
         </div>
 
         <aside className="app__side">
-          <DetailPanel
+          <WorkspacePanel
             selection={selection}
             projection={projection}
             onSelect={setSelection}
             onApprove={(reviewId) => void approve(reviewId)}
             graph={engine.getState().graph}
-          />
-          <AgentFeed
-            projection={projection}
-            selection={selection}
-            onSelect={setSelection}
           />
         </aside>
       </main>

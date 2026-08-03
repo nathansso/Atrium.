@@ -162,6 +162,10 @@ export function createLiveFirecrawlAdapter(): FirecrawlResearchAdapter {
         );
       });
 
+      if (claims.length === 0) {
+        throw new Error("Firecrawl search returned no usable cited results.");
+      }
+
       return { provider: PROVIDER, deterministic: false, sources, claims };
     },
   };

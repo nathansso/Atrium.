@@ -237,6 +237,19 @@ export function createMockFirecrawlAdapter(): FirecrawlResearchAdapter {
     info: () => info,
     async research(query: FirecrawlSearchQuery): Promise<FirecrawlResearchResult> {
       getState().calls += 1;
+      const normalizedTopic = query.topic
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, " ")
+        .trim();
+      if (
+        normalizedTopic !== "ai literacy" &&
+        normalizedTopic !== "artificial intelligence literacy"
+      ) {
+        throw new Error(
+          `The zero-credit mock fixture supports AI literacy only; configure Firecrawl to research "${query.topic}".`,
+        );
+      }
       const { sources, claims } = boundCorpus(query.maxResults);
       // Validate at the boundary exactly like the live adapter, so a malformed
       // fixture fails loudly here rather than downstream.

@@ -1,6 +1,13 @@
 import type { Metadata, Viewport } from "next";
+import { Parisienne } from "next/font/google";
 import { headers } from "next/headers";
 import "./globals.css";
+
+const parisienne = Parisienne({
+  subsets: ["latin"],
+  weight: "400",
+  variable: "--font-wordmark",
+});
 
 const title = "Atrium | A classroom with memory, in motion";
 const description =
@@ -56,7 +63,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body className={parisienne.variable}>{children}</body>
     </html>
   );
 }
