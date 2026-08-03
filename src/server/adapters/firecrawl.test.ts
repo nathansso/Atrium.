@@ -1,0 +1,89 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { researchClaimSchema, researchSourceSchema } from "@/contracts";
+import { getAdapterStatus, getAdapters, resetAdapters } from "./index";
+import { createMockFirecrawlAdapter } from "./firecrawlMock";
+
+const query = { topic: "AI literacy", audience: "high school", maxResults: 8 };
+
+beforeEach(async () => {
+  vi.unstubAllEnvs();
+  vi.stubEnv("SPONSOR_MODE", "");
+  await resetAdapters();
+});
+
+describe("firecrawl mock adapter", () => {
+  it("is deterministic: identical queries return identical results", async () => {
+    const adapter = createMockFirecrawlAdapter();
+    const first = await adapter.research(query);
+    const second = await adapter.research(query);
+    expect(first).toEqual(second);
+    expect(first.deterministic).toBe(true);
+    expect(first.provider).toBe("deterministic-fixtures");
+  });
+
+  it("returns schema-valid sources and non-bare claims", async () => {
+    const { sources, claims } = await createMockFirecrawlAdapter().research(query);
+    expect(sources.length).toBeGreaterThan(0);
+    expect(claims.length).toBeGreaterThan(0);
+    for (const source of sources) {
+      expect(() => researchSourceSchema.parse(source)).not.toThrow();
+    }
+    for (const claim of claims) {
+      expect(() => researchClaimSchema.parse(claim)).not.toThrow();
+      // Every claim carries at least one citation — the load-bearing invariant.
+      expect(claim.citations.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("bounds sources to maxResults and never leaves a claim uncited", async () => {
+    const { sources, claims } = await createMockFirecrawlAdapter().research({
+      ...query,
+      maxResults: 2,
+    });
+    expect(sources).toHaveLength(2);
+    const kept = new Set(sources.map((source) => source.source_id));
+    for (const claim of claims) {
+      expect(claim.citations.length).toBeGreaterThan(0);
+      expect(claim.citations.every((ref) => kept.has(ref))).toBe(true);
+    }
+  });
+
+  it("does not relabel the AI-literacy fixture as another topic", async () => {
+    await expect(
+      createMockFirecrawlAdapter().research({
+        ...query,
+        topic: "photosynthesis",
+      }),
+    ).rejects.toThrow("supports AI literacy only");
+  });
+});
+
+describe("firecrawl adapter registration", () => {
+  it("is registered and defaults to mock like the other providers", () => {
+    expect(getAdapters().firecrawl.info()).toMatchObject({
+      name: "firecrawl",
+      mode: "mock",
+    });
+    const status = getAdapterStatus().find((entry) => entry.name === "firecrawl");
+    expect(status?.effective_mode).toBe("mock");
+  });
+
+  it("is live-capable: goes live when SPONSOR_MODE=live and a key is present", async () => {
+    vi.stubEnv("SPONSOR_MODE", "live");
+    vi.stubEnv("FIRECRAWL_API_KEY", "lk_test");
+    await resetAdapters();
+
+    expect(getAdapters().firecrawl.info()).toMatchObject({
+      mode: "live",
+      provider: "firecrawl-search",
+    });
+    const status = getAdapterStatus().find((entry) => entry.name === "firecrawl");
+    expect(status).toMatchObject({ keys_present: true, effective_mode: "live" });
+  });
+
+  it("stays mock in live mode when the key is missing", async () => {
+    vi.stubEnv("SPONSOR_MODE", "live");
+    await resetAdapters();
+    expect(getAdapters().firecrawl.info().mode).toBe("mock");
+  });
+});

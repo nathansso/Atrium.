@@ -69,6 +69,27 @@ describe("Guild.ai — live adapter", () => {
     expect(headers.Authorization).toBe(`Basic ${Buffer.from("lesson_id:lesson_secret").toString("base64")}`);
   });
 
+  it("routes curriculum review through the lesson-planner gate with curriculum copy", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({ id: "session_curriculum" }));
+    const guild = createLiveGuildAdapter();
+
+    await guild.requestApproval({
+      run_id: "draft_0001",
+      gate_type: "curriculum_draft",
+      subject_id: "draft_0001",
+      reason: "Educator review required before publication.",
+    });
+
+    const [, init] = fetchSpy.mock.calls[0];
+    const headers = init?.headers as Record<string, string>;
+    expect(headers.Authorization).toBe(
+      `Basic ${Buffer.from("lesson_id:lesson_secret").toString("base64")}`,
+    );
+    const body = JSON.parse(init?.body as string);
+    expect(body.agent_input.text).toContain("cited curriculum draft");
+    expect(body.agent_input.text).toContain("Do not launch a classroom run");
+  });
+
   it("resolves a gate locally and forwards the decision into the Guild session", async () => {
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")
@@ -99,7 +120,7 @@ describe("Guild.ai — live adapter", () => {
     const guild = createLiveGuildAdapter();
 
     const registered = await guild.registerDefaultAgents();
-    expect(registered).toHaveLength(8);
+    expect(registered).toHaveLength(9);
 
     const handoff = await guild.handoff({
       run_id: RUN,

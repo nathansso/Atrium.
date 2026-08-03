@@ -46,12 +46,14 @@ const DEFAULT_PERMISSIONS: Record<AgentName, string[]> = {
   assessment_agent: ["read:submissions", "write:assessments", "request:review"],
   classroom_evolution_agent: ["read:assessments", "write:mastery", "write:rooms"],
   lesson_planner: ["read:mastery", "write:plan", "request:review"],
+  curriculum_research_agent: ["read:sources", "write:curriculum", "request:review"],
 };
 
 /** Which specialist agent backs each gate, and which env credential calls it. */
 const GATE_AGENT: Record<ApprovalGateType, AgentName> = {
   low_confidence_grade: "assessment_agent",
   final_plan: "lesson_planner",
+  curriculum_draft: "lesson_planner",
 };
 
 function guildSlug(agent: AgentName): string {
@@ -60,7 +62,10 @@ function guildSlug(agent: AgentName): string {
 
 function credentialFor(gateType: ApprovalGateType): string {
   const config = getEnvConfig();
-  const key = gateType === "final_plan" ? config.guildLessonPlannerApiKey : config.guildApiKey;
+  const key =
+    gateType === "low_confidence_grade"
+      ? config.guildApiKey
+      : config.guildLessonPlannerApiKey;
   if (!key || !config.guildWorkspace) {
     throw new Error(
       `Guild credentials missing for gate "${gateType}" — GUILD_API_KEY, GUILD_LESSON_PLANNER_API_KEY, and GUILD_WORKSPACE are all required for live mode.`,
@@ -102,8 +107,14 @@ function reviewPrompt(input: {
   reason: string;
   evidence_refs: string[];
 }): string {
+  const reviewSubject =
+    input.gate_type === "final_plan"
+      ? "final lesson plan"
+      : input.gate_type === "curriculum_draft"
+        ? "cited curriculum draft"
+        : "low-confidence grade";
   const lines = [
-    `Atrium is asking you to act as the human-review gate for a ${input.gate_type === "final_plan" ? "final lesson plan" : "low-confidence grade"}.`,
+    `Atrium is asking you to act as the human-review gate for a ${reviewSubject}.`,
     `Subject: ${input.subject_id}`,
     `Reason for review: ${input.reason}`,
   ];
@@ -111,7 +122,9 @@ function reviewPrompt(input: {
     lines.push(`Evidence: ${input.evidence_refs.join(", ")}`);
   }
   lines.push(
-    "This has already been graded/planned locally and only needs your approval gate. Call ui_prompt to put this in front of the professor with the reason and evidence above, then wait for the reply. Do not redo the grading or planning yourself.",
+    input.gate_type === "curriculum_draft"
+      ? "This cited draft has already been assembled locally and only needs the educator approval gate. Call ui_prompt to present the reason and evidence, then wait for the reply. Do not launch a classroom run."
+      : "This has already been graded/planned locally and only needs your approval gate. Call ui_prompt to put this in front of the professor with the reason and evidence above, then wait for the reply. Do not redo the grading or planning yourself.",
   );
   return lines.join("\n");
 }
@@ -193,11 +206,19 @@ export function createLiveGuildAdapter(): GuildAgentAdapter {
         details: { confidence: record.confidence },
       });
       if (record.human_review_required) {
+        const curriculumReview = record.agent === "curriculum_research_agent";
         await adapter.requestApproval({
           run_id: record.run_id,
-          gate_type: record.agent === "lesson_planner" ? "final_plan" : "low_confidence_grade",
-          subject_id: record.agent,
-          reason: `Agent ${record.agent} finished with confidence ${record.confidence.toFixed(2)} and requires professor review.`,
+          gate_type:
+            record.agent === "lesson_planner"
+              ? "final_plan"
+              : curriculumReview
+                ? "curriculum_draft"
+                : "low_confidence_grade",
+          subject_id: curriculumReview ? record.run_id : record.agent,
+          reason: curriculumReview
+            ? `Curriculum draft ${record.run_id} requires educator review before it can become student-facing.`
+            : `Agent ${record.agent} finished with confidence ${record.confidence.toFixed(2)} and requires professor review.`,
           evidence_refs: record.evidence_refs,
         });
       }

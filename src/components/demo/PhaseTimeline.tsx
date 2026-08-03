@@ -33,7 +33,7 @@ const SLOT_TIP: Record<EventType, string> = {
   "approval.requested": "Low-confidence grade sent for review",
 };
 
-/** Slot colors echo the agent that emits the event. */
+/** Stage colors echo the agent that emits the event. */
 const SLOT_TONE: Record<EventType, string> = {
   "assignment.uploaded": "#ffd45c",
   "assignment.concepts.extracted": "#ffd45c",
@@ -48,10 +48,48 @@ const SLOT_TONE: Record<EventType, string> = {
   "approval.requested": "#ffd45c",
 };
 
+const PIPELINE_PHASES = [
+  {
+    id: "prepare",
+    label: "Prepare",
+    stages: [
+      "assignment.uploaded",
+      "assignment.concepts.extracted",
+      "student.context.ready",
+    ],
+  },
+  {
+    id: "personalize",
+    label: "Personalize",
+    stages: [
+      "groups.proposed",
+      "accessibility.layers.ready",
+      "assignment.variants.ready",
+    ],
+  },
+  {
+    id: "run",
+    label: "Run",
+    stages: [
+      "submissions.received",
+      "assessment.completed",
+      "student.models.updated",
+    ],
+  },
+  {
+    id: "review",
+    label: "Review",
+    stages: ["lesson.plan.ready", "approval.requested"],
+  },
+] as const satisfies ReadonlyArray<{
+  id: string;
+  label: string;
+  stages: readonly EventType[];
+}>;
+
 /**
- * The eleven contract events rendered as a Minecraft hotbar. Discrete slots make
- * pipeline progress countable at a glance, and each filled slot is a shortcut to
- * the payload that filled it.
+ * The eleven contract events grouped into four readable phases. Each completed
+ * stage remains a shortcut to the payload that filled it.
  */
 export function PhaseTimeline({
   projection,
@@ -71,46 +109,95 @@ export function PhaseTimeline({
   const done = firstEventOfType.size;
 
   return (
-    <section className="hotbar" aria-label="Pipeline progress">
-      <div className="hotbar__head">
-        <h2 className="hotbar__title">Agent pipeline</h2>
-        <span className="hotbar__count">
+    <section className="pipeline" aria-label="Pipeline progress">
+      <header className="pipeline__header">
+        <h2 className="pipeline__title">Learning pipeline</h2>
+        <span className="pipeline__count">
           {done} / {eventTypes.length} stages
         </span>
-      </div>
-      <ol className="hotbar__slots">
-        {eventTypes.map((eventType, index) => {
-          const eventId = firstEventOfType.get(eventType);
-          const isActive =
-            selection.kind === "event" && selection.eventId === eventId;
+      </header>
+
+      <div className="pipeline__phases">
+        {PIPELINE_PHASES.map((phase) => {
+          const phaseDone = phase.stages.reduce(
+            (count, eventType) =>
+              count + (firstEventOfType.has(eventType) ? 1 : 0),
+            0,
+          );
+
           return (
-            <li key={eventType}>
-              <button
-                type="button"
-                className={`slot${eventId ? " slot--done" : ""}${
-                  isActive ? " slot--active" : ""
-                }`}
-                disabled={!eventId}
-                onClick={() => eventId && onSelect({ kind: "event", eventId })}
-                data-tip={SLOT_TIP[eventType]}
-                aria-label={`${SHORT_LABEL[eventType]} — ${
-                  eventId ? "complete" : "pending"
-                }. ${SLOT_TIP[eventType]}`}
-              >
-                <span
-                  className="slot__glyph"
-                  style={eventId ? { background: SLOT_TONE[eventType] } : undefined}
-                  aria-hidden="true"
-                />
-                <span className="slot__label">{SHORT_LABEL[eventType]}</span>
-                <span className="slot__key" aria-hidden="true">
-                  {index + 1 <= 9 ? index + 1 : ""}
+            <section
+              className="pipeline__phase"
+              aria-labelledby={`pipeline-phase-${phase.id}`}
+              key={phase.id}
+            >
+              <header className="pipeline__phase-header">
+                <h3
+                  className="pipeline__phase-title"
+                  id={`pipeline-phase-${phase.id}`}
+                >
+                  {phase.label}
+                </h3>
+                <span className="pipeline__phase-count">
+                  {phaseDone}/{phase.stages.length}
                 </span>
-              </button>
-            </li>
+              </header>
+
+              <ol className="pipeline__stages">
+                {phase.stages.map((eventType) => {
+                  const eventId = firstEventOfType.get(eventType);
+                  const isActive =
+                    selection.kind === "event" &&
+                    selection.eventId === eventId;
+                  const stageNumber =
+                    eventTypes.findIndex((type) => type === eventType) + 1;
+
+                  return (
+                    <li className="pipeline__stage-item" key={eventType}>
+                      <button
+                        type="button"
+                        className={`pipeline__stage${
+                          eventId ? " pipeline__stage--done" : ""
+                        }${isActive ? " pipeline__stage--active" : ""}`}
+                        disabled={!eventId}
+                        onClick={() =>
+                          eventId && onSelect({ kind: "event", eventId })
+                        }
+                        data-tip={SLOT_TIP[eventType]}
+                        title={SLOT_TIP[eventType]}
+                        aria-label={`${SHORT_LABEL[eventType]} — ${
+                          eventId ? "complete" : "pending"
+                        }. ${SLOT_TIP[eventType]}`}
+                      >
+                        <span
+                          className="pipeline__stage-marker"
+                          style={
+                            eventId
+                              ? { background: SLOT_TONE[eventType] }
+                              : undefined
+                          }
+                          aria-hidden="true"
+                        />
+                        <span className="pipeline__stage-label">
+                          {SHORT_LABEL[eventType]}
+                        </span>
+                        {stageNumber <= 9 ? (
+                          <span
+                            className="pipeline__stage-key"
+                            aria-hidden="true"
+                          >
+                            {stageNumber}
+                          </span>
+                        ) : null}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ol>
+            </section>
           );
         })}
-      </ol>
+      </div>
     </section>
   );
 }

@@ -24,6 +24,8 @@ import { createLiveLaserAdapter, closeLiveLaser } from "./laserStream";
 import { createMockLaserAdapter, resetMockLaser } from "./laserMock";
 import { createLiveRocketRideAdapter, closeLiveRocketRide } from "./rocketrideLive";
 import { createMockRocketRideAdapter, resetMockRocketRide } from "./rocketrideMock";
+import { createLiveFirecrawlAdapter, closeLiveFirecrawl } from "./firecrawlLive";
+import { createMockFirecrawlAdapter, resetMockFirecrawl } from "./firecrawlMock";
 import type { SponsorAdapters } from "./types";
 
 const GLOBAL_KEY = "__atrium_adapters__";
@@ -44,6 +46,7 @@ function buildAdapters(): SponsorAdapters {
       ? createLiveRocketRideAdapter()
       : createMockRocketRideAdapter(),
     guild: isLive("guild") ? createLiveGuildAdapter() : createMockGuildAdapter(),
+    firecrawl: isLive("firecrawl") ? createLiveFirecrawlAdapter() : createMockFirecrawlAdapter(),
   };
 }
 
@@ -69,6 +72,7 @@ const liveCapable: ReadonlySet<AdapterName> = new Set<AdapterName>([
   "laser",
   "rocketride",
   "guild",
+  "firecrawl",
 ]);
 
 /**
@@ -103,7 +107,13 @@ export async function resetAdapters(): Promise<void> {
   resetMockRocketRide();
   resetMockGuild();
   resetLiveGuild();
-  await Promise.all([closeLiveFalkor(), closeLiveLaser(), closeLiveRocketRide()]);
+  resetMockFirecrawl();
+  await Promise.all([
+    closeLiveFalkor(),
+    closeLiveLaser(),
+    closeLiveRocketRide(),
+    closeLiveFirecrawl(),
+  ]);
 }
 
 export * from "./types";

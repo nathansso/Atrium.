@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AtriumIcon } from "@/components/ui/atrium-icons";
 import { BASE_H, BASE_W, tileToScreen } from "@/world/iso";
 import { getGraph } from "@/world/api";
 import { layoutGraph } from "@/world/graph";
@@ -156,6 +157,15 @@ export function WorldStage({ engine, projection, selection, onSelect }: Props) {
     return counts;
   }, [projection.studentRoom]);
 
+  const toggleGraph = () => {
+    setShowGraph((visible) => {
+      const next = !visible;
+      const graph = engine.getState().graph;
+      if (graph) engine.setGraphOverlay({ ...graph, visible: next });
+      return next;
+    });
+  };
+
   return (
     <div className="stage">
       <div className="stage__frame">
@@ -206,34 +216,45 @@ export function WorldStage({ engine, projection, selection, onSelect }: Props) {
       </div>
 
       <div className="stage__footer">
-        <button
-          type="button"
-          className="chip-button"
-          onClick={() => setShowLabels((value) => !value)}
-        >
-          {showLabels ? "Hide labels" : "Show labels"}
-        </button>
-        <button
-          type="button"
-          className="chip-button"
-          onClick={() => {
-            setShowGraph((visible) => {
-              const next = !visible;
-              const graph = engine.getState().graph;
-              if (graph) engine.setGraphOverlay({ ...graph, visible: next });
-              return next;
-            });
-          }}
-        >
-          {showGraph ? "Hide memory graph" : "Show memory graph"}
-        </button>
         <p className="stage__hint">
-          Click a building or a student in the world to inspect it.
+          Select a building or student to inspect its learning record.
         </p>
+        <details className="stage__view-menu">
+          <summary className="stage__view-trigger">
+            <AtriumIcon name="view" size={18} />
+            View
+          </summary>
+          <div className="stage__view-popover">
+            <button
+              type="button"
+              className="stage__view-option"
+              aria-pressed={showLabels}
+              onClick={() => setShowLabels((value) => !value)}
+            >
+              <AtriumIcon name="labels" size={18} />
+              <span>World labels</span>
+              <span className="stage__view-state" aria-hidden="true">
+                {showLabels ? "On" : "Off"}
+              </span>
+            </button>
+            <button
+              type="button"
+              className="stage__view-option"
+              aria-pressed={showGraph}
+              onClick={toggleGraph}
+            >
+              <AtriumIcon name="memory" size={18} />
+              <span>Memory graph</span>
+              <span className="stage__view-state" aria-hidden="true">
+                {showGraph ? "On" : "Off"}
+              </span>
+            </button>
+          </div>
+        </details>
       </div>
 
       {/* Keyboard/screen-reader route to the same selections the canvas offers. */}
-      <div className="stage__a11y">
+      <div className="stage__a11y sr-only">
         <span className="stage__a11y-title">Jump to</span>
         {showGraph && graphNodes.map((node) => (
           <button

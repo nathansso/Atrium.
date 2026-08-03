@@ -1,5 +1,12 @@
 import type { Metadata, Viewport } from "next";
+import { Parisienne } from "next/font/google";
 import "./globals.css";
+
+const parisienne = Parisienne({
+  subsets: ["latin"],
+  weight: "400",
+  variable: "--font-wordmark",
+});
 
 export const metadata: Metadata = {
   title: "Atrium — self-evolving classroom",
@@ -10,7 +17,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#0d1226",
+  themeColor: "#151517",
 };
 
 export default function RootLayout({
@@ -20,7 +27,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body className={parisienne.variable}>{children}</body>
     </html>
   );
 }
