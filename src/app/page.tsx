@@ -1,5 +1,5 @@
-import { AtriumApp } from "@/components/demo/AtriumApp";
+import { AtriumLanding } from "@/components/landing/AtriumLanding";
 
 export default function Page() {
-  return <AtriumApp />;
+  return <AtriumLanding />;
 }
