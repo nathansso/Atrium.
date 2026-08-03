@@ -31,7 +31,10 @@ import type {
 
 /** Iggy topic names allow alphanumerics, dashes and underscores. */
 function topicName(runId: string): string {
-  return `run-${runId}`.replace(/[^A-Za-z0-9_-]/g, "-");
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(runId)) {
+    throw new Error("Run IDs must contain only letters, numbers, dashes, or underscores");
+  }
+  return `run-${runId}`;
 }
 
 type GlobalWithLaser = typeof globalThis & {
@@ -64,12 +67,12 @@ function ensuredTopics(): Set<string> {
   return store.__atrium_laser_topics__;
 }
 
-async function topicFor(runId: string, partitions = 1) {
+async function topicFor(runId: string, partitions = 1, create = false) {
+  const name = topicName(runId);
   const laser = await connect();
   const config = getEnvConfig();
-  const name = topicName(runId);
   const topic = laser.stream(config.laserStream).topic(name);
-  if (!ensuredTopics().has(name)) {
+  if (create && !ensuredTopics().has(name)) {
     await topic.ensure(partitions);
     ensuredTopics().add(name);
   }
@@ -84,9 +87,10 @@ const REPLAY_BATCH_SIZE = 500;
  * Decodes one Iggy message back into an AgentEvent. Parsing is strict: a
  * malformed frame is skipped rather than allowed to poison a replay.
  */
-function decodeEvent(payload: Uint8Array): AgentEvent | null {
+function decodeEvent(payload: Uint8Array, runId: string): AgentEvent | null {
   try {
-    return agentEventSchema.parse(JSON.parse(decoder.decode(payload)));
+    const event = agentEventSchema.parse(JSON.parse(decoder.decode(payload)));
+    return event.run_id === runId ? event : null;
   } catch {
     return null;
   }
@@ -99,11 +103,11 @@ export function createLiveLaserAdapter(): LaserStreamAdapter {
     },
 
     async ensureTopic(runId: string, partitions = 1): Promise<void> {
-      await topicFor(runId, partitions);
+      await topicFor(runId, partitions, true);
     },
 
     async publish(event: AgentEvent): Promise<void> {
-      const topic = await topicFor(event.run_id);
+      const topic = await topicFor(event.run_id, 1, true);
       await topic.send(encoder.encode(JSON.stringify(event)));
     },
 
@@ -119,7 +123,7 @@ export function createLiveLaserAdapter(): LaserStreamAdapter {
      * in the order they actually happened.
      */
     async ingestActivity(activity: ActivityRecord): Promise<void> {
-      const topic = await topicFor(activity.run_id);
+      const topic = await topicFor(activity.run_id, 1, true);
       // `record_type`, not `kind` — ActivityRecord already uses `kind` for
       // submission/attempt/hint_request/idle, which must survive the round trip.
       await topic.send(
@@ -143,7 +147,7 @@ export function createLiveLaserAdapter(): LaserStreamAdapter {
                 .fromOffsets(new Map([[0, options.fromOffset]]))
                 .stream({ signal: controller.signal });
           for await (const message of messages) {
-            const event = decodeEvent(message.payload);
+            const event = decodeEvent(message.payload, runId);
             if (!event) continue;
             try {
               onEvent(event);
@@ -175,7 +179,7 @@ export function createLiveLaserAdapter(): LaserStreamAdapter {
         const batch = await cursor.poll();
         if (batch.length === 0) break;
         for (const message of batch) {
-          const event = decodeEvent(message.payload);
+          const event = decodeEvent(message.payload, runId);
           if (event) out.push({ event, offset: message.offset });
         }
       }

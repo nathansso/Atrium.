@@ -10,9 +10,13 @@ vi.mock("@laserdata/laser-sdk", () => ({
 
 const encoder = new TextEncoder();
 
-function eventMessage(eventType: "assignment.uploaded" | "groups.proposed", offset: bigint) {
+function eventMessage(
+  eventType: "assignment.uploaded" | "groups.proposed",
+  offset: bigint,
+  runId = "run_live",
+) {
   const event = createEvent({
-    run_id: "run_live",
+    run_id: runId,
     event_type: eventType,
     source_agent: eventType === "assignment.uploaded" ? "assignment_architect" : "grouping_agent",
     payload: {},
@@ -61,6 +65,7 @@ describe("live LaserData adapter", () => {
     const fromOffsets = vi.fn(() => ({
       stream: vi.fn(() => messages([
         { payload: encoder.encode("not-json"), offset: 7n },
+        eventMessage("assignment.uploaded", 8n, "run_other"),
         eventMessage("assignment.uploaded", 8n),
         eventMessage("groups.proposed", 9n),
       ])),
@@ -75,7 +80,14 @@ describe("live LaserData adapter", () => {
 
     expect(fromOffsets).toHaveBeenCalledWith(new Map([[0, 7n]]));
     expect(listener.mock.calls[1][0].event_type).toBe("groups.proposed");
+    expect(topic.ensure).not.toHaveBeenCalled();
     unsubscribe();
+  });
+
+  it("rejects non-canonical run IDs before connecting", async () => {
+    await expect(createLiveLaserAdapter().ensureTopic("class/a"))
+      .rejects.toThrow("Run IDs must contain only letters, numbers, dashes, or underscores");
+    expect(sdk.connectWithStream).not.toHaveBeenCalled();
   });
 
   it("uses the live consumer and reports transport failures", async () => {
@@ -89,6 +101,19 @@ describe("live LaserData adapter", () => {
 
     expect(topic.consumer).toHaveBeenCalledWith(0, { autoCommit: true });
     expect(stream).toHaveBeenCalledOnce();
+  });
+
+  it("does not report a transport error after the subscriber aborts", async () => {
+    topic.consumer.mockReturnValue({
+      stream: vi.fn(() => messages([], new Error("aborted stream"))),
+    });
+    const onError = vi.fn();
+
+    const unsubscribe = createLiveLaserAdapter().subscribe("run_live", vi.fn(), { onError });
+    unsubscribe();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(onError).not.toHaveBeenCalled();
   });
 
   it("finds the largest durable offset across batches and handles an empty topic", async () => {

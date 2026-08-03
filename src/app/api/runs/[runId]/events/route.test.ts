@@ -226,7 +226,7 @@ describe("GET /api/runs/:runId/events", () => {
     const events = await readEvents(response.body!.getReader(), 1);
 
     expect(events).toEqual([event]);
-    expect(laser.ensureTopic).toHaveBeenCalledWith(RUN);
+    expect(laser.ensureTopic).not.toHaveBeenCalled();
     expect(laser.subscribe).toHaveBeenCalledWith(
       RUN,
       expect.any(Function),
@@ -277,6 +277,18 @@ describe("GET /api/runs/:runId/events", () => {
 
     await expect(reader.read()).resolves.toMatchObject({ done: true });
     expect(unsubscribe).toHaveBeenCalledOnce();
+  });
+
+  it("returns a structured 503 when live Laser history is unavailable", async () => {
+    laser.mode = "live";
+    laser.replay.mockRejectedValue(new Error("offline"));
+
+    const response = await GET(makeGetRequest(undefined, "?format=json"), makeContext(RUN));
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "laser_unavailable" },
+    });
   });
 });
 

@@ -12,6 +12,7 @@ import { getAdapters } from "@/server/adapters";
 import { trace } from "@/server/platform/guildWorkflow";
 import { getEnvConfig } from "@/server/config";
 import { emitEvent, getRunEvents, subscribeToRun } from "@/server/events";
+import { apiError } from "@/server/http";
 
 export const dynamic = "force-dynamic";
 
@@ -35,9 +36,14 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
     url.searchParams.get("format") === "json" ||
     (request.headers.get("accept") ?? "").includes("application/json");
   if (wantsJson) {
-    const history = live
-      ? (await laser.replay(runId)).map((record) => record.event)
-      : getRunEvents(runId);
+    let history: AgentEvent[];
+    try {
+      history = live
+        ? (await laser.replay(runId)).map((record) => record.event)
+        : getRunEvents(runId);
+    } catch {
+      return apiError("laser_unavailable", "Live event history is unavailable.", 503);
+    }
     const seen = new Set<string>();
     const events = history.filter((event) => {
       if (seen.has(event.event_id)) return false;
@@ -49,12 +55,13 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
 
   let fromOffset = 0n;
   const lastEventId = request.headers.get("last-event-id");
-  if (live) {
-    await laser.ensureTopic(runId);
-    if (lastEventId) {
+  if (live && lastEventId) {
+    try {
       for (const record of await laser.replay(runId)) {
         if (record.event.event_id === lastEventId) fromOffset = record.offset + 1n;
       }
+    } catch {
+      return apiError("laser_unavailable", "Live event history is unavailable.", 503);
     }
   }
 
