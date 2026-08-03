@@ -14,14 +14,20 @@
 
 export type SponsorMode = "mock" | "live";
 
-/** One adapter per mandated sponsor. Memory, live data, motion, agents. */
-export type AdapterName = "falkordb" | "laser" | "rocketride" | "guild";
+/**
+ * One adapter per mandated sponsor (memory, live data, motion, agents), plus
+ * `firecrawl` — the source-grounded research provider that powers curriculum
+ * authoring. Like RocketRide, Firecrawl has no local fallback service, so live
+ * mode requires a key.
+ */
+export type AdapterName = "falkordb" | "laser" | "rocketride" | "guild" | "firecrawl";
 
 export const adapterNames = [
   "falkordb",
   "laser",
   "rocketride",
   "guild",
+  "firecrawl",
 ] as const satisfies readonly AdapterName[];
 
 export type EnvConfig = {
@@ -39,6 +45,10 @@ export type EnvConfig = {
   /** Guild.ai — multi-agent layer. */
   guildApiKey: string | null;
   guildWorkspace: string | null;
+  /** Firecrawl — source-grounded research layer. */
+  firecrawlApiKey: string | null;
+  firecrawlBaseUrl: string;
+  firecrawlMaxResults: number;
 };
 
 function readOptional(name: string): string | null {
@@ -59,6 +69,9 @@ export function getEnvConfig(): EnvConfig {
     rocketrideUri: readOptional("ROCKETRIDE_URI") ?? "https://api.rocketride.ai",
     guildApiKey: readOptional("GUILD_API_KEY"),
     guildWorkspace: readOptional("GUILD_WORKSPACE"),
+    firecrawlApiKey: readOptional("FIRECRAWL_API_KEY"),
+    firecrawlBaseUrl: readOptional("FIRECRAWL_BASE_URL") ?? "https://api.firecrawl.dev/v1",
+    firecrawlMaxResults: Number(readOptional("FIRECRAWL_MAX_RESULTS")) || 8,
   };
 }
 
@@ -69,6 +82,8 @@ const keyRequirements: Record<AdapterName, (config: EnvConfig) => boolean> = {
   // RocketRide is the one sponsor with no local fallback — it needs a key.
   rocketride: (config) => config.rocketrideApiKey !== null,
   guild: (config) => config.guildApiKey !== null,
+  // Firecrawl, like RocketRide, is a hosted API with no local service.
+  firecrawl: (config) => config.firecrawlApiKey !== null,
 };
 
 /** True when every credential the adapter needs for live mode is present. */

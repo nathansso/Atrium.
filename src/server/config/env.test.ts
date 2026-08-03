@@ -12,6 +12,9 @@ const ENV_KEYS = [
   "ROCKETRIDE_URI",
   "GUILD_API_KEY",
   "GUILD_WORKSPACE",
+  "FIRECRAWL_API_KEY",
+  "FIRECRAWL_BASE_URL",
+  "FIRECRAWL_MAX_RESULTS",
 ];
 
 describe("env config", () => {

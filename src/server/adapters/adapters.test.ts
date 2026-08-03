@@ -25,9 +25,15 @@ beforeEach(async () => {
 });
 
 describe("adapter factory", () => {
-  it("exposes exactly the four mandated sponsors", () => {
+  it("exposes the four mandated sponsors plus the firecrawl research provider", () => {
     const adapters = getAdapters();
-    expect(Object.keys(adapters).sort()).toEqual(["falkordb", "guild", "laser", "rocketride"]);
+    expect(Object.keys(adapters).sort()).toEqual([
+      "falkordb",
+      "firecrawl",
+      "guild",
+      "laser",
+      "rocketride",
+    ]);
   });
 
   it("returns a stable singleton bundle", () => {
@@ -36,7 +42,7 @@ describe("adapter factory", () => {
 
   it("reports every adapter as mock by default", () => {
     const status = getAdapterStatus();
-    expect(status).toHaveLength(4);
+    expect(status).toHaveLength(5);
     expect(status.every((entry) => entry.effective_mode === "mock")).toBe(true);
   });
 
@@ -307,13 +313,13 @@ describe("RocketRide — motion layer", () => {
 });
 
 describe("Guild.ai — agent layer", () => {
-  it("registers all eight agents idempotently with permissions", async () => {
+  it("registers all nine agents idempotently with permissions", async () => {
     const { guild } = getAdapters();
     const registered = await guild.registerDefaultAgents();
-    expect(registered).toHaveLength(8);
+    expect(registered).toHaveLength(9);
 
     await guild.registerDefaultAgents();
-    expect(await guild.listAgents()).toHaveLength(8);
+    expect(await guild.listAgents()).toHaveLength(9);
     expect(registered[0].permissions.length).toBeGreaterThan(0);
   });
 

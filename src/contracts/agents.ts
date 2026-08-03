@@ -10,6 +10,10 @@ export const agentNames = [
   "assessment_agent",
   "classroom_evolution_agent",
   "lesson_planner",
+  // Source-grounded curriculum authoring (issue #4). Runs ahead of Assignment
+  // Architect once wired into coreLoop; today it drives the standalone
+  // curriculum-research preview route.
+  "curriculum_research_agent",
 ] as const;
 
 export const agentNameSchema = z.enum(agentNames);

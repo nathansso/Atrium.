@@ -28,6 +28,8 @@ import type {
   ConceptId,
   MasteryEstimate,
   MisconceptionId,
+  ResearchClaim,
+  ResearchSource,
   Room,
   SupportId,
 } from "@/contracts";
@@ -294,6 +296,47 @@ export interface GuildAgentAdapter {
 }
 
 // ---------------------------------------------------------------------------
+// Firecrawl — the research layer (source-grounded web search)
+// ---------------------------------------------------------------------------
+//
+// Firecrawl is an upstream research provider: a topic goes in, a bounded set of
+// citable sources and source-backed claims comes out. It performs retrieval and
+// grounding only — the pedagogy (concepts, prerequisites, chunks, checks) is the
+// Curriculum Research agent's job, built on top of what this returns. Unlike the
+// four mandated sponsors it has no persistence or event-spine role, so it is a
+// plain adapter its agent calls directly.
+
+export type FirecrawlSearchQuery = {
+  topic: string;
+  audience: string;
+  /** Hard upper bound on returned sources. */
+  maxResults: number;
+  includeDomains?: string[];
+  excludeDomains?: string[];
+  /** ISO date; the provider is asked to prefer sources newer than this. */
+  fromDate?: string | null;
+  teachingIntent?: string;
+};
+
+export type FirecrawlResearchResult = {
+  provider: string;
+  /** True when the result came from the deterministic offline fixture. */
+  deterministic: boolean;
+  sources: ResearchSource[];
+  claims: ResearchClaim[];
+};
+
+export interface FirecrawlResearchAdapter {
+  info(): AdapterInfo;
+  /**
+   * Run a bounded, source-grounded search. Sources and claims are validated
+   * against the contract schemas at the boundary, so unstructured narrative
+   * output can never reach the curriculum layer.
+   */
+  research(query: FirecrawlSearchQuery): Promise<FirecrawlResearchResult>;
+}
+
+// ---------------------------------------------------------------------------
 // Bundle
 // ---------------------------------------------------------------------------
 
@@ -302,4 +345,5 @@ export type SponsorAdapters = {
   laser: LaserStreamAdapter;
   rocketride: RocketRidePipelineAdapter;
   guild: GuildAgentAdapter;
+  firecrawl: FirecrawlResearchAdapter;
 };
