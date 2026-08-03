@@ -10,6 +10,14 @@
  * SDKs can read process.env directly when we hand off to them:
  *   - LASER_CONNECTION_STRING / LASER_STREAM  -> Laser.connectEnv()
  *   - ROCKETRIDE_APIKEY / ROCKETRIDE_URI      -> new RocketRideClient()
+ *
+ * Guild.ai has no npm SDK to hand credentials to (see guildLive.ts) — it is
+ * called over its Trigger REST API instead, which needs one API-trigger
+ * credential per gated agent:
+ *   - GUILD_API_KEY                 -> assessment-agent trigger (low_confidence_grade gate)
+ *   - GUILD_LESSON_PLANNER_API_KEY  -> lesson-planner trigger (final_plan gate)
+ * Both are the combined `<api_key_id>:<api_key_secret>` string Guild's web UI
+ * shows once when the trigger is created.
  */
 
 export type SponsorMode = "mock" | "live";
@@ -38,6 +46,7 @@ export type EnvConfig = {
   rocketrideUri: string;
   /** Guild.ai — multi-agent layer. */
   guildApiKey: string | null;
+  guildLessonPlannerApiKey: string | null;
   guildWorkspace: string | null;
 };
 
@@ -58,6 +67,7 @@ export function getEnvConfig(): EnvConfig {
     rocketrideApiKey: readOptional("ROCKETRIDE_APIKEY"),
     rocketrideUri: readOptional("ROCKETRIDE_URI") ?? "https://api.rocketride.ai",
     guildApiKey: readOptional("GUILD_API_KEY"),
+    guildLessonPlannerApiKey: readOptional("GUILD_LESSON_PLANNER_API_KEY"),
     guildWorkspace: readOptional("GUILD_WORKSPACE"),
   };
 }
@@ -68,7 +78,12 @@ const keyRequirements: Record<AdapterName, (config: EnvConfig) => boolean> = {
   laser: (config) => config.laserConnectionString !== null,
   // RocketRide is the one sponsor with no local fallback — it needs a key.
   rocketride: (config) => config.rocketrideApiKey !== null,
-  guild: (config) => config.guildApiKey !== null,
+  // Both gates need their own trigger credential, plus the workspace to
+  // address the Trigger API's session endpoint.
+  guild: (config) =>
+    config.guildApiKey !== null &&
+    config.guildLessonPlannerApiKey !== null &&
+    config.guildWorkspace !== null,
 };
 
 /** True when every credential the adapter needs for live mode is present. */
