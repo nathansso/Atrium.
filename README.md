@@ -346,7 +346,12 @@ src/
 │   ├── events/             event bus and SSE plumbing
 │   ├── mastery/            Bayesian Knowledge Tracing
 │   ├── motion/             RocketRide pipeline execution
-│   └── submissions/        submission preparation
+│   ├── submissions/        submission preparation
+│   ├── coreLoop.ts         run orchestration — the whole loop, end to end
+│   ├── agentRuntime.ts     agent execution runtime
+│   ├── eventBridge.ts      event bus ↔ adapter wiring
+│   ├── sponsorBridge.ts    sponsor adapter wiring
+│   └── runStore.ts         run state store
 └── world/                  isometric renderer — iso, layout, graph, render, sim
 docs/
 ├── CONTRACTS.md            frozen shared contracts
