@@ -34,7 +34,6 @@ import {
   runAssignmentCurator,
   runAssignmentCuratorWithPipeline,
 } from "./agents/assignmentCurator";
-import { getAdapters } from "./adapters";
 import {
   extractUploadedAssignment,
   type MotionProvenance,
@@ -45,6 +44,7 @@ import {
   registerAgents,
   runPipeline,
 } from "./sponsorBridge";
+import { rocketRidePipelinePort, writeRoomFormation } from "./platform/rocketRideDataPlane";
 
 /**
  * The deterministic upload-to-variants loop.
@@ -245,6 +245,13 @@ async function beginCoreRun(input: {
     grouping: grouping.result,
     status: "grouped",
   }));
+  // RocketRide's data plane persists the formation before downstream agents
+  // consume it, making the FalkorDB graph a durable input to later runs.
+  try {
+    await writeRoomFormation(runId, grouping.result.rooms);
+  } catch (error) {
+    console.warn(`[data-plane] room formation persistence failed for ${runId}:`, error);
+  }
   await recordAgentRun(runId, "grouping_agent", grouping);
   await drainEventsToStream(updateRun(runId, (state) => state));
 
@@ -398,7 +405,7 @@ export async function createRunFromRequest(
     );
   }
 
-  const { rocketride } = getAdapters();
+  const rocketride = rocketRidePipelinePort();
   let assignment = parsed.assignment;
   let extractionProvenance: MotionProvenance | undefined;
 

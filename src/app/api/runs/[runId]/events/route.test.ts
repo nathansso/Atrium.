@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentEvent } from "@/contracts";
-import { resetAuditLog } from "@/server/audit";
 import { emitEvent, getRunEvents, getSubscriberCount, resetEventBus } from "@/server/events";
 import { GET, POST } from "./route";
 
@@ -41,7 +40,6 @@ async function readEvents(
 describe("GET /api/runs/:runId/events", () => {
   beforeEach(() => {
     resetEventBus();
-    resetAuditLog();
   });
 
   it("replays history, then streams live events, and unsubscribes on abort", async () => {
@@ -128,7 +126,6 @@ describe("GET /api/runs/:runId/events", () => {
 describe("POST /api/runs/:runId/events", () => {
   beforeEach(() => {
     resetEventBus();
-    resetAuditLog();
     vi.stubEnv("SPONSOR_MODE", "");
   });
 

@@ -13,7 +13,7 @@ import { demoAnswerKey, demoSubmissions } from "@/seed/submissions";
 import { runAssessmentAgent } from "@/server/agents/assessment";
 import { runClassroomEvolutionAgent } from "@/server/agents/classroomEvolution";
 import { runLessonPlanner } from "@/server/agents/lessonPlanner";
-import { recordAudit } from "@/server/audit";
+import { trace } from "@/server/platform/guildWorkflow";
 import {
   drainEventsToStream,
   ingestSubmissions,
@@ -65,7 +65,7 @@ export async function simulateSubmissions(runId: string): Promise<RunState> {
     misconception_counts: countMisconceptions(run),
     average_score: averageScore(run),
   });
-  recordAudit({
+  await trace({
     run_id: run.run_id,
     actor: "assessment_agent",
     action: "assessment.completed",
@@ -93,7 +93,7 @@ export async function simulateSubmissions(runId: string): Promise<RunState> {
     class_concept_averages: evolution.result.class_concept_averages,
     largest_gap_concept: evolution.result.largest_gap_concept,
   });
-  recordAudit({
+  await trace({
     run_id: run.run_id,
     actor: "classroom_evolution_agent",
     action: "student.models.updated",
@@ -152,7 +152,7 @@ export async function simulateSubmissions(runId: string): Promise<RunState> {
     status: "pending",
   };
   run.review_queue.push(planReview);
-  recordAudit({
+  await trace({
     run_id: run.run_id,
     actor: "lesson_planner",
     action: "lesson.plan.ready",

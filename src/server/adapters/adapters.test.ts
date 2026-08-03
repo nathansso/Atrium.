@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import type { Room } from "@/contracts";
-import { getReviewGates, resetAuditLog } from "@/server/audit";
 import { resetEventBus } from "@/server/events";
 import { getAdapterStatus, getAdapters, resetAdapters } from "./index";
 
@@ -23,7 +22,6 @@ beforeEach(async () => {
   vi.stubEnv("SPONSOR_MODE", "");
   await resetAdapters();
   resetEventBus();
-  resetAuditLog();
 });
 
 describe("adapter factory", () => {
@@ -378,7 +376,7 @@ describe("Guild.ai — agent layer", () => {
     expect(await guild.listHandoffs(RUN)).toHaveLength(1);
   });
 
-  it("mirrors review gates into the audit log", async () => {
+  it("records review gates in Guild traces", async () => {
     const { guild } = getAdapters();
     await guild.requestApproval({
       run_id: RUN,
@@ -386,6 +384,7 @@ describe("Guild.ai — agent layer", () => {
       subject_id: "lesson_planner",
       reason: "Educator sign-off.",
     });
-    expect(getReviewGates(RUN).length).toBeGreaterThan(0);
+    const traces = await guild.listTraces(RUN);
+    expect(traces.some((trace) => trace.action === "guild.approval_requested:final_plan")).toBe(true);
   });
 });

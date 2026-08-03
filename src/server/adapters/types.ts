@@ -247,6 +247,23 @@ export type ApprovalGate = {
   resolved_at: string | null;
 };
 
+/** A durable Guild trace. Guild is the system of record for workflow history. */
+export type GuildTrace = {
+  trace_id: string;
+  run_id: string;
+  actor: AgentName | "system" | "professor";
+  action: string;
+  evidence_refs: string[];
+  review_gate: boolean;
+  timestamp: string;
+  details?: Record<string, unknown>;
+};
+
+export type GuildTraceInput = Omit<GuildTrace, "trace_id" | "timestamp" | "evidence_refs" | "review_gate"> & {
+  evidence_refs?: string[];
+  review_gate?: boolean;
+};
+
 export interface GuildAgentAdapter {
   info(): AdapterInfo;
   /** Register one agent. Idempotent per agent name. */
@@ -270,6 +287,10 @@ export interface GuildAgentAdapter {
   }): Promise<ApprovalGate>;
   listApprovals(runId: string): Promise<ApprovalGate[]>;
   resolveApproval(gateId: string, decision: "approved" | "rejected"): Promise<ApprovalGate | null>;
+  /** Append a workflow trace. Replaces Atrium's former local audit log. */
+  recordTrace(input: GuildTraceInput): Promise<GuildTrace>;
+  /** Return the authoritative, run-scoped execution history. */
+  listTraces(runId: string): Promise<GuildTrace[]>;
 }
 
 // ---------------------------------------------------------------------------

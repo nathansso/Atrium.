@@ -15,22 +15,21 @@
  * never fails the run. That is the same guarantee `resolveAdapterMode()` makes
  * one level down, and it is what keeps the demo alive when venue wifi dies.
  */
-import type { AgentEvent, AgentName, AgentResult, RunState } from "@/contracts";
-import { getAdapters } from "@/server/adapters";
+import type { AgentName, AgentResult, RunState } from "@/contracts";
 import type { PipelineTask } from "@/server/adapters";
-import { recordAudit } from "@/server/audit";
+import {
+  executePipeline,
+  publishRunEvents,
+  resetDataPlaneProgress,
+  writeSubmissionActivities,
+} from "@/server/platform/rocketRideDataPlane";
+import {
+  recordGuildAgentResult,
+  registerGuildAgents,
+  trace,
+} from "@/server/platform/guildWorkflow";
 
 /** Per-run high-water mark of events already published to the stream. */
-const PUBLISHED_KEY = "__atrium_laser_published__";
-
-function publishedCounts(): Map<string, number> {
-  const store = globalThis as Record<string, unknown>;
-  if (!store[PUBLISHED_KEY]) {
-    store[PUBLISHED_KEY] = new Map<string, number>();
-  }
-  return store[PUBLISHED_KEY] as Map<string, number>;
-}
-
 /**
  * Publish every event appended since the last call onto the run's topic.
  *
@@ -39,21 +38,8 @@ function publishedCounts(): Map<string, number> {
  * consumers must stay idempotent.
  */
 export async function drainEventsToStream(state: RunState): Promise<number> {
-  const { laser } = getAdapters();
-  const counts = publishedCounts();
-  const alreadySent = counts.get(state.run_id) ?? 0;
-  const pending = state.events.slice(alreadySent);
-  if (pending.length === 0) {
-    return 0;
-  }
-
   try {
-    await laser.ensureTopic(state.run_id);
-    for (const event of pending) {
-      await laser.publish(event as AgentEvent);
-    }
-    counts.set(state.run_id, state.events.length);
-    return pending.length;
+    return await publishRunEvents(state);
   } catch (error) {
     // A dead stream costs the live layer, not the run.
     console.warn(`[sponsor] laser publish failed for ${state.run_id}:`, error);
@@ -73,16 +59,8 @@ export async function recordAgentRun(
   agent: AgentName,
   result: AgentResult<unknown>,
 ): Promise<void> {
-  const { guild } = getAdapters();
   try {
-    await guild.recordAgentRun({
-      run_id: runId,
-      agent,
-      status: result.status,
-      confidence: result.confidence,
-      evidence_refs: result.evidence_refs.slice(0, 8),
-      human_review_required: result.human_review_required,
-    });
+    await recordGuildAgentResult(runId, agent, result);
   } catch (error) {
     console.warn(`[sponsor] guild record failed for ${agent}:`, error);
   }
@@ -90,9 +68,8 @@ export async function recordAgentRun(
 
 /** Register the eight contract agents once per run. */
 export async function registerAgents(): Promise<void> {
-  const { guild } = getAdapters();
   try {
-    await guild.registerDefaultAgents();
+    await registerGuildAgents();
   } catch (error) {
     console.warn("[sponsor] guild agent registration failed:", error);
   }
@@ -108,19 +85,8 @@ export async function ingestSubmissions(
   runId: string,
   submissions: Array<{ student_id: string; submission_id: string }>,
 ): Promise<number> {
-  const { laser } = getAdapters();
   try {
-    await laser.ensureTopic(runId);
-    for (const submission of submissions) {
-      await laser.ingestActivity({
-        run_id: runId,
-        student_id: submission.student_id,
-        kind: "submission",
-        payload: { submission_id: submission.submission_id },
-        observed_at: new Date().toISOString(),
-      });
-    }
-    return submissions.length;
+    return await writeSubmissionActivities(runId, submissions);
   } catch (error) {
     console.warn(`[sponsor] laser ingest failed for ${runId}:`, error);
     return 0;
@@ -147,12 +113,9 @@ export async function runPipeline<T = unknown>(
   prompt: string,
   context?: Record<string, unknown>,
 ): Promise<PipelineOutcome<T>> {
-  const { rocketride } = getAdapters();
   try {
-    const result = await rocketride.run<T>({ task, prompt, context });
-    // The token is the receipt. Auditing every execution is what lets anyone
-    // verify the pipeline actually ran rather than taking the output on faith.
-    recordAudit({
+    const result = await executePipeline<T>({ task, prompt, context });
+    await trace({
       run_id: runId,
       actor: "system",
       action: `rocketride.pipeline:${task}`,
@@ -165,7 +128,7 @@ export async function runPipeline<T = unknown>(
     };
   } catch (error) {
     console.warn(`[sponsor] rocketride "${task}" failed:`, error);
-    recordAudit({
+    await trace({
       run_id: runId,
       actor: "system",
       action: `rocketride.pipeline_failed:${task}`,
@@ -177,10 +140,5 @@ export async function runPipeline<T = unknown>(
 
 /** Test helper: forget what has been published so a rerun republishes. */
 export function resetStreamProgress(runId?: string): void {
-  const counts = publishedCounts();
-  if (runId) {
-    counts.delete(runId);
-  } else {
-    counts.clear();
-  }
+  resetDataPlaneProgress(runId);
 }

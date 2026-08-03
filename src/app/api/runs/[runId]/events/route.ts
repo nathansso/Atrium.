@@ -7,7 +7,7 @@
  */
 import { z } from "zod";
 import { agentNames, eventTypes, type AgentEvent } from "@/contracts";
-import { recordAudit } from "@/server/audit";
+import { trace } from "@/server/platform/guildWorkflow";
 import { getEnvConfig } from "@/server/config";
 import { emitEvent, getRunEvents, subscribeToRun } from "@/server/events";
 
@@ -119,7 +119,7 @@ export async function POST(request: Request, context: RouteContext): Promise<Res
     source_agent: parsed.data.source_agent,
     payload: parsed.data.payload ?? {},
   });
-  recordAudit({
+  await trace({
     run_id: runId,
     actor: "system",
     action: `events.injected:${event.event_type}`,
