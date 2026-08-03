@@ -87,13 +87,10 @@ flowchart LR
   E --> F[Students submit work]
   F --> G[LaserData streams submissions in live]
   G --> H[Assessment agent scores and classifies misconceptions]
-  H --> I{Confident?}
-  I -->|No| J[Guild.ai pauses for human review]
-  I -->|Yes| K[Mastery updated in FalkorDB]
-  J --> K
-  K --> L[Rooms dissolve and re-form]
-  L --> M[Next-day lesson plan]
-  M --> A
+  H --> K[Mastery updated in FalkorDB · rooms re-form]
+  K --> L[RocketRide drafts next-day lesson plan]
+  L --> N{Educator approves<br/>plan and any held grades}
+  N -->|Yes| A
 ```
 
 The demo uses a synthetic Algebra I class across four concepts: integer operations, the distributive property, equation sequencing, and combining like terms.
@@ -230,13 +227,13 @@ One full run, end to end:
 13. Students submit                     → Laser ingestActivity()
 14. submissions.received
 15. Assessment agent grades             confidence scored per item
-16. approval.requested                  → Guild gate, run PAUSES
-        ↓ human clicks approve
-17. assessment.completed
-18. FalkorDB upsertMastery()            new edges written; memory compounds
-19. student.models.updated              → students move between rooms
-20. RocketRide lesson_plan_synthesis
-21. lesson.plan.ready                   → tomorrow's school appears
+16. assessment.completed                low-confidence grades held for review
+17. FalkorDB upsertMastery()            new edges written; memory compounds
+18. student.models.updated              → students move between rooms
+19. RocketRide lesson_plan_synthesis
+20. lesson.plan.ready                   → tomorrow's school appears
+21. approval.requested                  → Guild gate, run PAUSES
+        ↓ educator approves plan + held grades via /approve-plan
 ```
 
 Every one of the 11 event types is defined and Zod-validated in `src/contracts/events.ts`.
