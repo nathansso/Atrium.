@@ -71,14 +71,31 @@ describe("adapter factory", () => {
     expect(adapters.rocketride.info().mode).toBe("mock");
   });
 
-  it("never reports guild as live, because it has no live implementation", async () => {
+  it("falls back to mock when only one of guild's two gate credentials is present", async () => {
     vi.stubEnv("SPONSOR_MODE", "live");
     vi.stubEnv("GUILD_API_KEY", "gk_test");
     await resetAdapters();
 
     const guild = getAdapterStatus().find((entry) => entry.name === "guild");
-    expect(guild).toMatchObject({ keys_present: true, effective_mode: "mock" });
+    expect(guild).toMatchObject({ keys_present: false, effective_mode: "mock" });
     expect(getAdapters().guild.info().mode).toBe("mock");
+  });
+
+  it("selects the live guild adapter once both gate credentials and the workspace are present", async () => {
+    vi.stubEnv("SPONSOR_MODE", "live");
+    vi.stubEnv("GUILD_API_KEY", "gk_assessment");
+    vi.stubEnv("GUILD_LESSON_PLANNER_API_KEY", "gk_lesson_planner");
+    vi.stubEnv("GUILD_WORKSPACE", "mem-in-motion/atrium");
+    await resetAdapters();
+
+    // info() is synchronous and opens no connection, so this asserts
+    // selection without calling Guild's API.
+    expect(getAdapters().guild.info()).toMatchObject({
+      mode: "live",
+      provider: "guild-trigger-api",
+    });
+    const guild = getAdapterStatus().find((entry) => entry.name === "guild");
+    expect(guild).toMatchObject({ keys_present: true, effective_mode: "live" });
   });
 });
 

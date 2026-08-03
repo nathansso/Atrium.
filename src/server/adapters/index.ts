@@ -18,6 +18,7 @@ import {
 } from "@/server/config";
 import { createLiveFalkorAdapter, closeLiveFalkor } from "./falkorLive";
 import { createMockFalkorAdapter, resetMockFalkor } from "./falkorMock";
+import { createLiveGuildAdapter, resetLiveGuild } from "./guildLive";
 import { createMockGuildAdapter, resetMockGuild } from "./guildMock";
 import { createLiveLaserAdapter, closeLiveLaser } from "./laserStream";
 import { createMockLaserAdapter, resetMockLaser } from "./laserMock";
@@ -31,18 +32,12 @@ const GLOBAL_KEY = "__atrium_adapters__";
 
 /**
  * Mode is resolved per adapter, so a missing key costs one layer rather than
- * the whole run. Guild has no live implementation yet — its SDK ships from a
- * private registry — so it resolves to mock even when a key is present, and
- * says so rather than silently pretending.
+ * the whole run. Guild's live adapter calls its Trigger REST API for the two
+ * mandatory approval gates; agent registry and handoffs have no external
+ * Guild endpoint, so both modes keep that bookkeeping local (see guildLive.ts).
  */
 function buildAdapters(): SponsorAdapters {
   const isLive = (name: (typeof adapterNames)[number]) => resolveAdapterMode(name) === "live";
-
-  if (resolveAdapterMode("guild") === "live") {
-    console.warn(
-      '[adapters] guild has no live implementation yet (@guildai/agents-sdk is not on public npm); using the mock.',
-    );
-  }
 
   return {
     falkordb: isLive("falkordb") ? createLiveFalkorAdapter() : createMockFalkorAdapter(),
@@ -50,7 +45,7 @@ function buildAdapters(): SponsorAdapters {
     rocketride: isLive("rocketride")
       ? createLiveRocketRideAdapter()
       : createMockRocketRideAdapter(),
-    guild: createMockGuildAdapter(),
+    guild: isLive("guild") ? createLiveGuildAdapter() : createMockGuildAdapter(),
     firecrawl: isLive("firecrawl") ? createLiveFirecrawlAdapter() : createMockFirecrawlAdapter(),
   };
 }
@@ -77,6 +72,7 @@ const liveCapable: ReadonlySet<AdapterName> = new Set<AdapterName>([
   "laser",
   "rocketride",
   "firecrawl",
+  "guild",
 ]);
 
 /**
@@ -111,6 +107,7 @@ export async function resetAdapters(): Promise<void> {
   resetMockRocketRide();
   resetMockGuild();
   resetMockFirecrawl();
+  resetLiveGuild();
   await Promise.all([
     closeLiveFalkor(),
     closeLiveLaser(),
