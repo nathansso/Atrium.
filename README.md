@@ -11,7 +11,7 @@ You type a topic. Firecrawl searches the web and returns ranked sources. Atrium 
 🔗 Live: [atrium-web-production-164a.up.railway.app](https://atrium-web-production-164a.up.railway.app)
 
 ```bash
-git clone https://github.com/Da0t/Atrium.git && cd Atrium
+git clone https://github.com/nathansso/Atrium..git && cd Atrium.
 npm install && npm run dev      # → http://localhost:3001
 ```
 
