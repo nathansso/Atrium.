@@ -145,6 +145,14 @@ export function useAtrium({ initialRunId }: { initialRunId?: string } = {}) {
     stopSource();
     engine.reset();
     seenEventIdsRef.current.clear();
+    // A launched run replaces the previous one wholesale, so run-scoped state is
+    // cleared before the new stream is subscribed. These resets are synchronous
+    // on purpose: the SSE source starts later in this same effect, and the first
+    // event it delivers must land on cleared state rather than on the outgoing
+    // run's projection. Deferring them would leak the previous run into the new
+    // one. The lasting fix is to key the demo tree on the run id so the hook
+    // remounts instead of resetting itself.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset must precede subscribe, see above
     setProjection(createRunProjection());
     setSelection({ kind: "none" });
     setNotice(null);
